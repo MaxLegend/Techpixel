@@ -13,7 +13,7 @@
 //   2. dispatch_gi()     — runs inject + N propagation iterations
 //   3. bind_group()      — returns the group(1) bind group for the render pass
 
-use crate::core::vct::voxel_volume::{VOLUME_SIZE, VOLUME_TOTAL, VoxelSnapshot, pack_volume};
+use crate::core::vct::voxel_volume::{VOLUME_SIZE, VoxelSnapshot, pack_volume};
 use crate::core::vct::dynamic_lights::{PointLightGPU, SpotLightGPU, EntityShadowAABB};
 use crate::core::gameobjects::block::BlockRegistry;
 use crate::debug_log;

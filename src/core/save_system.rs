@@ -14,7 +14,7 @@
 use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 use bincode::{encode_to_vec, decode_from_slice, config};
-use bincode::error::{EncodeError, DecodeError};
+use bincode::error::EncodeError;
 use crate::debug_log;
 
 pub const SAVE_VERSION: u32 = 1;

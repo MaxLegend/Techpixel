@@ -50,8 +50,8 @@ use rayon::prelude::*;
 use crate::core::gameobjects::block::BlockRegistry;
 use crate::core::world_gen::biome_layer::BiomeLayer;
 use crate::core::world_gen::biome_registry::{BiomeDictionary, ClimateTag};
-use crate::core::world_gen::climate::{ClimateInfo, ClimateLayer, ClimateType};
-use crate::core::world_gen::geography::{GeoInfo, GeographyLayer, OCEAN_MAX};
+use crate::core::world_gen::climate::{ClimateInfo, ClimateLayer};
+use crate::core::world_gen::geography::{GeoInfo, GeographyLayer};
 use crate::core::world_gen::geology::{GeologyInfo, GeologyLayer};
 use crate::core::world_gen::layers::{
     LayerAddIsland, LayerBiome, LayerEdge, LayerFuzzyZoom, LayerIsland, LayerRiverInit,

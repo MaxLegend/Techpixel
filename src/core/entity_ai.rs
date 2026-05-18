@@ -270,7 +270,6 @@ pub fn tick_sheep(
                     }
                 }
                 ai.yaw = ai.rng.next_f32() * std::f32::consts::TAU;
-                new_yaw = ai.yaw;
                 ai.state = SheepState::Wander;
                 ai.state_timer = ai.rng.range_f32(WANDER_MIN_S, WANDER_MAX_S);
             }
@@ -336,14 +335,12 @@ pub fn tick_sheep(
                 // Too tall — turn around
                 ai.yaw = (ai.yaw + std::f32::consts::PI + (ai.rng.next_f32() - 0.5) * 1.0)
                     .rem_euclid(std::f32::consts::TAU);
-                new_yaw = ai.yaw;
                 ai.is_walking = false;
             }
         } else {
             // Blocked above — turn
             ai.yaw = (ai.yaw + std::f32::consts::PI + (ai.rng.next_f32() - 0.5) * 1.0)
                 .rem_euclid(std::f32::consts::TAU);
-            new_yaw = ai.yaw;
             ai.is_walking = false;
         }
 

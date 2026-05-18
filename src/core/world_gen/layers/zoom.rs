@@ -10,7 +10,7 @@
 //! | [`LayerVoronoiZoom`] | 4× | Jittered nearest-cell (Voronoi) |
 
 use glam::Vec2;
-use crate::core::world_gen::biome_layer::{BiomeLayer, GenContext, check_output_size, coord_hash, coord_hash_to_f64};
+use crate::core::world_gen::biome_layer::{BiomeLayer, GenContext, check_output_size, coord_hash_to_f64};
 use crate::{debug_log, ext_debug_log, flow_debug_log};
 // ===========================================================================
 // Shared helpers
@@ -195,7 +195,7 @@ impl BiomeLayer for LayerZoom {
                 let pbx = bx - px;
                 let pby = by - py;
 
-                let center = read_parent(&parent_buf, pw, ph, pbx, pby, 0, 0);
+                let _center = read_parent(&parent_buf, pw, ph, pbx, pby, 0, 0);
 
                 // Collect 3×3 neighborhood.
                 let maj = majority_3x3(

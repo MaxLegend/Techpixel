@@ -2,8 +2,7 @@
 // QubePixel — egui font configuration (TTF loading + fallback)
 // =============================================================================
 
-use crate::{debug_log};
-use crate::core::logging::IS_DEBUG;
+use crate::debug_log;
 
 /// Configure egui fonts. Attempts to load a TTF from assets; falls back
 /// to the built-in egui default (Roboto).
@@ -37,7 +36,7 @@ pub fn configure_fonts(ctx: &egui::Context) {
                 debug_log!("EguiFonts", "configure_fonts",
                     "Loaded TTF font from {:?}", font_path);
             }
-            Err(e) => {
+            Err(_e) => {
                 // if IS_DEBUG {
                 //     log::warn!(
                 //         "[EguiFonts][configure_fonts] Failed to read {:?}: {}, \

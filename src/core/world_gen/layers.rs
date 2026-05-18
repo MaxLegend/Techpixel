@@ -20,4 +20,4 @@ pub mod biome_layer_impl;
 pub use island::{LayerIsland, LayerRiverInit};
 pub use zoom::{LayerZoom, LayerFuzzyZoom, LayerVoronoiZoom};
 pub use modifiers::{LayerAddIsland, LayerEdge, LayerSmooth};
-pub use biome_layer_impl::{LayerBiome, LayerBiomeEdge, LayerDiffusion};
+pub use biome_layer_impl::{LayerBiome};

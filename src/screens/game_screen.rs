@@ -5,7 +5,7 @@
 // Only static directional (sun/moon) PBR lighting with ambient.
 
 use crate::core::screen::{Screen, ScreenAction};
-use crate::{debug_log, flow_debug_log};
+use crate::{debug_log};
 use std::time::Instant;
 
 use crate::screens::debug_overlay::DebugOverlay;
@@ -16,17 +16,17 @@ use crate::core::upload_worker::{UploadWorker, UploadJob, UploadPacked, MeshKind
 use crate::core::world_gen::world::{WorldWorker, WorldResult, BlockOp};
 use winit::event::{ElementState, WindowEvent};
 use winit::keyboard::{KeyCode, PhysicalKey};
-use crate::screens::settings::SettingsScreen;
+
 use crate::core::gameobjects::texture_atlas::TextureAtlas;
 use crate::core::save_system::{WorldMetadata, save_world_meta};
 use crate::core::raycast::RaycastResult;
 use crate::core::physics::PhysicsWorld;
 use crate::core::player::PlayerController;
-use crate::core::gameobjects::block::{BlockRegistry, BlockLightSource, LightKind, PlacementMode};
+use crate::core::gameobjects::block::{BlockRegistry, BlockLightSource, LightKind};
 use crate::core::lighting::{DayNightCycle, LightingConfig, pack_lighting_uniforms};
 use crate::screens::sky_renderer::SkyRenderer;
 use glam::Vec3;
-use egui::{Color32, FontId, Pos2, Rect, Stroke, Vec2, Align2, Rounding};
+use egui::{Color32, FontId, Pos2, Stroke, Align2};
 use crate::core::config;
 use crate::core::user_settings;
 use crate::core::vct::{VCTSystem, VoxelSnapshot, SpotLightGPU, PointLightGPU};

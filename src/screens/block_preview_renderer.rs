@@ -177,7 +177,6 @@ fn load_png(key: &str) -> Option<image::RgbaImage> {
 /// Composite `layers` on top of `base` using Porter-Duff "source over".
 /// All images are bilinear-scaled to the base resolution before blending.
 fn composite_layers(base: image::RgbaImage, layers: &[&str]) -> image::RgbaImage {
-    use image::GenericImageView;
     let (w, h) = base.dimensions();
     let mut result = base;
     for &key in layers {

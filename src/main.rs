@@ -1,4 +1,6 @@
 #![allow(unused_mut)]
+#![allow(dead_code)]
+#![allow(deprecated)]
 mod core;
 mod screens;
 
@@ -175,7 +177,7 @@ fn main() {
                         .unwrap_or(false);
                     if !is_ours { return; }
                     if let Some(window) = app.window.as_ref() {
-                        app.egui_manager.on_window_event(window, &event);
+                        let _ = app.egui_manager.on_window_event(window, &event);
                     }
                     match event {
                         WindowEvent::CloseRequested => {

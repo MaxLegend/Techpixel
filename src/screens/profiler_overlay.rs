@@ -118,7 +118,7 @@ impl ProfilerOverlay {
 
         let frame_wall_ms = if f.fps > 0.0 { 1000.0 / f.fps } else { 0.0 };
         let frame_cpu_ms  = ms(f.frame_total_us);
-        let gpu_gap_ms    = (frame_wall_ms - frame_cpu_ms).max(0.0);
+        let _gpu_gap_ms    = (frame_wall_ms - frame_cpu_ms).max(0.0);
         let frame_color   = if frame_wall_ms > 33.3 { Color32::RED }
             else if frame_wall_ms > 16.6 { Color32::YELLOW }
             else { Color32::GREEN };

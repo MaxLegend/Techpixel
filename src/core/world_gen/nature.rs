@@ -113,7 +113,7 @@ impl NatureLayer {
         if geo.is_river  { return NatureBiome::Plains; }
 
         // Continentalness bands → broad zones
-        let cont = geo.continentalness;
+        let _cont = geo.continentalness;
 
         match climate_type {
             ClimateType::Arctic | ClimateType::Antarctic =>

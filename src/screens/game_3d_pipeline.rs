@@ -13,8 +13,6 @@ use std::time::Instant;
 const CHUNK_MESH_VRAM_BUDGET: u64 = 4096 * 1024 * 1024;
 use crate::{debug_log, ext_debug_log, flow_debug_log};
 use glam::{Mat4, Vec3};
-use crate::core::config;
-use crate::core::vct::VCTSystem;
 
 // ---------------------------------------------------------------------------
 // FrustumPlanes
@@ -1318,7 +1316,7 @@ impl Game3DPipeline {
             },
         );
 
-        let vertex_layout = wgpu::VertexBufferLayout {
+        let _vertex_layout = wgpu::VertexBufferLayout {
             array_stride: std::mem::size_of::<Vertex3D>() as wgpu::BufferAddress,
             step_mode:    wgpu::VertexStepMode::Vertex,
             attributes:   &wgpu::vertex_attr_array![
@@ -1541,7 +1539,7 @@ impl Game3DPipeline {
             },
         );
 
-        let vertex_layout = wgpu::VertexBufferLayout {
+        let _vertex_layout = wgpu::VertexBufferLayout {
             array_stride: std::mem::size_of::<Vertex3D>() as wgpu::BufferAddress,
             step_mode:    wgpu::VertexStepMode::Vertex,
             attributes:   &wgpu::vertex_attr_array![

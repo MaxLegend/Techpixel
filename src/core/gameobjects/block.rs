@@ -1173,7 +1173,7 @@ impl BlockRegistry {
             "File map contains {} entries", file_map.len()
         );
 
-        for (i, block_id) in registry.blocks.iter().enumerate() {
+        for (_i, block_id) in registry.blocks.iter().enumerate() {
             let numeric_id = (definitions.len() + 1) as u8;
 
             let block_path = match file_map.get(block_id.as_str()) {

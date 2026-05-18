@@ -22,8 +22,6 @@
 //! Never use `thread_rng`, `RandomState`, or any other non-deterministic source.
 //! This guarantees that the same `(seed, x, y)` always produces the same output.
 
-use std::collections::hash_map::DefaultHasher;
-use std::hash::{Hash, Hasher};
 use crate::{debug_log, ext_debug_log};
 // ---------------------------------------------------------------------------
 // GenContext — buffer pooling

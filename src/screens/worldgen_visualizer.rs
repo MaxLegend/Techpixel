@@ -703,10 +703,10 @@ fn temperature_color(temp: f64) -> Color32 {
 }
 
 fn geology_color(
-    macro_r: crate::core::world_gen::geology::MacroRegion,
+    _macro_r: crate::core::world_gen::geology::MacroRegion,
     micro_r: crate::core::world_gen::geology::MicroRegion,
 ) -> Color32 {
-    use crate::core::world_gen::geology::{MacroRegion, MicroRegion};
+    use crate::core::world_gen::geology::{MicroRegion};
     match micro_r {
         MicroRegion::Gneiss   => Color32::from_rgb(180, 100, 180),
         MicroRegion::Schist   => Color32::from_rgb(160, 80, 160),

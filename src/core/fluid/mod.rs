@@ -290,7 +290,7 @@ impl FluidSimulator {
         let zp_key    = (key.0, key.1, key.2 + 1);
 
         let below_slice = Self::snap_y_slice(chunks, &below_key, sy - 1, sx, sy, sz);
-        let above_slice = Self::snap_y_slice(chunks, &above_key, 0,      sx, sy, sz);
+        let _above_slice = Self::snap_y_slice(chunks, &above_key, 0,      sx, sy, sz);
         let xn_slice    = Self::snap_x_slice(chunks, &xn_key,    sx - 1, sx, sy, sz);
         let xp_slice    = Self::snap_x_slice(chunks, &xp_key,    0,      sx, sy, sz);
         let zn_slice    = Self::snap_z_slice(chunks, &zn_key,    sz - 1, sx, sy, sz);
@@ -693,7 +693,7 @@ impl FluidSimulator {
         chunks: &HashMap<(i32, i32, i32), Chunk>,
         key: &(i32, i32, i32),
         x: usize,
-        sx: usize, sy: usize, sz: usize,
+        _sx: usize, sy: usize, sz: usize,
     ) -> Option<Vec<(u8, f32)>> {
         let chunk = chunks.get(key)?;
         let mut out = Vec::with_capacity(sy * sz);

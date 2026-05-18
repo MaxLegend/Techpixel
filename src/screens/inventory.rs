@@ -6,7 +6,7 @@ use std::collections::HashMap;
 use egui::{Color32, Pos2, Rect, Rounding, Stroke, Vec2, Align2, FontId, Margin};
 
 use crate::screens::inventory_model_renderer::ModelPreviewSlot;
-use crate::{debug_log, ext_debug_log, flow_debug_log};
+use crate::{debug_log, ext_debug_log};
 
 // =============================================================================
 // Constants

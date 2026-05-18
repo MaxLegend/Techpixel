@@ -5,7 +5,7 @@
 use std::sync::mpsc;
 use std::thread;
 use std::time::Instant;
-use crate::{debug_log, flow_debug_log, ext_debug_log};
+use crate::{debug_log, flow_debug_log};
 use crate::screens::game_3d_pipeline::Vertex3D;
 
 /// Distinguishes which GPU mesh store an upload job belongs to.
