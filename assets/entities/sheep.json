@@ -1,0 +1,38 @@
+{
+  "format_version": 1,
+  "id": "sheep",
+  "display_name": "Sheep",
+  "description": "Passive grazer; eats grass and turns it into dirt.",
+  "default_scale": 0.9,
+  "model_path": "assets/models/entity/sheep_model.json",
+  "skin_path": "assets/textures/entity/sheep/sheep.png",
+  "light_sources": [],
+  "spawn": {
+    "enabled": true,
+    "rarity": 0.04,
+    "max_per_chunk": 2,
+    "max_alive": 32,
+    "min_y": 50,
+    "max_y": 200,
+    "spawn_on_blocks": [
+      "grass",
+      "grass/grass_andesite",
+      "grass/grass_basalt",
+      "grass/grass_gneiss",
+      "grass/grass_granite",
+      "grass/grass_kimberlite",
+      "grass/grass_lherzolite",
+      "grass/grass_limestone",
+      "grass/grass_marble",
+      "grass/grass_ophiolite",
+      "grass/grass_sandstone",
+      "grass/grass_schist",
+      "grass/grass_slate"
+    ],
+    "biome_tags": [
+      "plains",
+      "forest",
+      "grass"
+    ]
+  }
+}

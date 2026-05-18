@@ -23,6 +23,8 @@ pub mod player_model;
 pub mod block_model;
 pub mod model_messenger;
 pub mod entity;
+pub mod entity_ai;
+pub mod entity_definition;
 pub mod frame_timing;
 pub mod user_settings;
 pub mod save_system;

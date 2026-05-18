@@ -28,7 +28,7 @@ use crate::core::lighting::DayNightCycle;
 use crate::screens::entity_renderer::{BoneDrawData, EntityRenderCall};
 
 /// Overall player model scale (0.85 = 85% of original Minecraft proportions).
-const PLAYER_SIZE: f32 = 0.85;
+pub const PLAYER_SIZE: f32 = 0.85;
 
 /// Walking animation amplitudes (radians).
 const WALK_LEG_AMP:   f32 = 0.45;  // thigh swing (~26°)

@@ -21,7 +21,14 @@ pub struct UserSettings {
     pub shadow_quality:            u32,
     pub halo_enabled:              bool,
     pub volumetric_rays_enabled:   bool,
+    #[serde(default = "default_mouse_sensitivity")]
+    pub mouse_sensitivity_x10000:  u32,
+    #[serde(default = "default_fly_speed")]
+    pub fly_speed:                 u32,
 }
+
+fn default_mouse_sensitivity() -> u32 { 30 }
+fn default_fly_speed() -> u32 { 12 }
 
 impl Default for UserSettings {
     fn default() -> Self {
@@ -37,6 +44,8 @@ impl Default for UserSettings {
             shadow_quality:            64,
             halo_enabled:              true,
             volumetric_rays_enabled:   true,
+            mouse_sensitivity_x10000:  30,
+            fly_speed:                 12,
         }
     }
 }
@@ -77,6 +86,8 @@ pub fn load_and_apply() {
     config::set_shadow_quality(settings.shadow_quality);
     config::set_halo_enabled(settings.halo_enabled);
     config::set_volumetric_rays_enabled(settings.volumetric_rays_enabled);
+    config::set_mouse_sensitivity(settings.mouse_sensitivity_x10000 as f32 / 10000.0);
+    config::set_fly_speed(settings.fly_speed as f32);
 }
 
 /// Read current atomics and write them to the JSON file.
@@ -93,6 +104,8 @@ pub fn save_current() {
         shadow_quality:            config::shadow_quality(),
         halo_enabled:              config::halo_enabled(),
         volumetric_rays_enabled:   config::volumetric_rays_enabled(),
+        mouse_sensitivity_x10000:  (config::mouse_sensitivity() * 10000.0).round() as u32,
+        fly_speed:                 config::fly_speed() as u32,
     };
 
     match serde_json::to_string_pretty(&settings) {

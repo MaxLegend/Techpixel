@@ -28,10 +28,12 @@ use crate::screens::sky_renderer::SkyRenderer;
 use glam::Vec3;
 use egui::{Color32, FontId, Pos2, Rect, Stroke, Vec2, Align2, Rounding};
 use crate::core::config;
+use crate::core::user_settings;
 use crate::core::vct::{VCTSystem, VoxelSnapshot, SpotLightGPU, PointLightGPU};
 use crate::core::player_model::PlayerModel;
 use crate::core::entity::{EntityId, EntityManager, EntityTransform};
-use crate::screens::player_renderer::{PlayerRenderer, PlayerPose, ViewMode, PLAYER_BONE_ORDER};
+use crate::screens::player_renderer::{PlayerRenderer, PlayerPose, ViewMode, PLAYER_BONE_ORDER, PLAYER_SIZE};
+use crate::screens::light_emitter_renderer::EmitterLight;
 use crate::screens::entity_renderer::EntityRenderer;
 use crate::screens::block_model_renderer::{BlockModelRenderer, BlockModelLighting};
 use crate::screens::inventory::{InventoryUI, InventoryConfig, ItemStack};
@@ -197,6 +199,23 @@ fn wrap_angle(a: f32) -> f32 {
     angle_diff(a, 0.0)
 }
 
+/// Cheap deterministic [0,1) hash from a world position + salt.
+/// Used as the rarity gate for entity spawning so each candidate column
+/// has a stable random roll across runs.
+#[inline]
+fn position_hash01(x: i32, y: i32, z: i32, salt: u64) -> f32 {
+    // FNV-1a-ish mix on the packed coords + salt; final shuffle via splitmix64.
+    let mut h: u64 = 0xCBF2_9CE4_8422_2325u64
+        ^ (x as i64 as u64).wrapping_mul(0x100000001B3)
+        ^ (y as i64 as u64).wrapping_mul(0x9E3779B97F4A7C15)
+        ^ (z as i64 as u64).wrapping_mul(0xBF58_476D_1CE4_E5B9)
+        ^ salt.wrapping_mul(0x94D049BB133111EB);
+    h ^= h >> 30; h = h.wrapping_mul(0xBF58_476D_1CE4_E5B9);
+    h ^= h >> 27; h = h.wrapping_mul(0x94D0_49BB_1331_11EBu64);
+    h ^= h >> 31;
+    (h >> 40) as f32 / (1u32 << 24) as f32
+}
+
 
 pub struct GameScreen {
     // -- 3D ------------------------------------------------------------------
@@ -250,16 +269,26 @@ pub struct GameScreen {
     block_registry_for_vct: BlockRegistry,
     /// Dynamic spot lights extracted from the voxel volume when snapshot updates.
     spot_lights: Vec<SpotLightGPU>,
+    /// Static block spot lights from light_sources, cached from last voxel snapshot.
+    block_spot_lights: Vec<SpotLightGPU>,
     /// Static block point lights from light_sources, cached from last voxel snapshot.
     block_point_lights: Vec<PointLightGPU>,
     /// Dynamic point lights assembled from test entities each frame.
     point_lights: Vec<PointLightGPU>,
+    /// Billboard-only mirror of point + spot lights for LightEmitterRenderer.
+    /// Excludes the player's own entity lights in first-person view, so the
+    /// player doesn't see a glow sphere through their own model.
+    emitter_lights: Vec<EmitterLight>,
     /// Test entities with a head point light; spawned via G key.
     test_light_entities: Vec<EntityId>,
     /// Positions queued for test entity spawn; processed at render time (needs device).
     pending_test_entity_spawns: Vec<Vec3>,
     /// Volumetric renderer — halos + god rays for analytical lights.
     volumetric_renderer: Option<crate::core::vct::VolumetricRenderer>,
+    /// Billboard glow renderer — bright point at each active light source.
+    light_emitter_renderer: Option<crate::screens::light_emitter_renderer::LightEmitterRenderer>,
+    /// Player head-mounted spotlight, toggled with L.
+    player_spotlight_on: bool,
     // -- Transition ----------------------------------------------------------
     pending_action: ScreenAction,
     // -- Profiler accumulators -----------------------------------------------
@@ -311,6 +340,20 @@ pub struct GameScreen {
     walk_phase:      f32,
     is_walking:      bool,
     last_foot_pos:   Vec3,
+    // -- Entity definitions (for per-entity light sources) ------------------
+    entity_registry: crate::core::entity_definition::EntityRegistry,
+    // -- Natural-spawn entity tracking --------------------------------------
+    /// AI state per sheep entity, keyed by entity ID.
+    sheep_ai: HashMap<EntityId, crate::core::entity_ai::SheepAI>,
+    /// Reverse map: chunk → entity IDs spawned in that chunk (for despawn-on-evict).
+    chunk_entities: HashMap<(i32, i32, i32), Vec<EntityId>>,
+    /// Counter used to perturb the per-sheep RNG seed.
+    sheep_spawn_counter: u64,
+    /// True once the sheep model has been registered in EntityRenderer.
+    sheep_model_registered: bool,
+    /// Pending sheep spawns queued from the worker; processed at render time
+    /// (requires `device` for EntityRenderer::spawn_instance).
+    pending_sheep_spawns: Vec<((i32, i32, i32), Vec3, f32)>,
     // -- World save ---------------------------------------------------------
     world_metadata:  Option<WorldMetadata>,
     world_dir:       Option<std::path::PathBuf>,
@@ -550,11 +593,15 @@ impl GameScreen {
             last_voxel_snapshot: None,
             block_registry_for_vct,
             spot_lights: Vec::new(),
+            block_spot_lights: Vec::new(),
             block_point_lights: Vec::new(),
             point_lights: Vec::new(),
+            emitter_lights: Vec::new(),
             test_light_entities: Vec::new(),
             pending_test_entity_spawns: Vec::new(),
             volumetric_renderer: None,
+            light_emitter_renderer: None,
+            player_spotlight_on: false,
             pending_action: ScreenAction::None,
             last_sky_render_us:        0,
             last_vct_upload_us:        0,
@@ -587,6 +634,12 @@ impl GameScreen {
             is_walking:      false,
             last_foot_pos:   Vec3::ZERO,
             inventory_ui,
+            entity_registry: crate::core::entity_definition::EntityRegistry::load(),
+            sheep_ai:                HashMap::new(),
+            chunk_entities:          HashMap::new(),
+            sheep_spawn_counter:     0,
+            sheep_model_registered:  false,
+            pending_sheep_spawns:    Vec::new(),
             world_metadata:  metadata,
             world_dir,
             last_autosave:   Instant::now(),
@@ -622,8 +675,119 @@ impl GameScreen {
         debug_log!("GameScreen", "do_save_world", "World save requested to {:?}", dir);
     }
 
+    // ---------------------------------------------------------------------
+    // Natural entity spawning
+    // ---------------------------------------------------------------------
+
+    /// Run spawn rules against per-chunk surface samples (one batch per WorldResult).
+    /// Newly created spawn intents are buffered in `pending_sheep_spawns` and the
+    /// GPU instance is created at render time when `device` is available.
+    fn process_entity_spawn_candidates(
+        &mut self,
+        fresh_chunk_surfaces: &[((i32, i32, i32), Vec<(i32, i32, i32, u8)>)],
+    ) {
+        if fresh_chunk_surfaces.is_empty() { return; }
+
+        // Active sheep count (alive + queued).
+        let alive_sheep = self.sheep_ai.len()
+            + self.pending_sheep_spawns.len();
+
+        // Iterate every entity definition that has spawn rules.
+        let registry_keys: Vec<String> = self.entity_registry.registry_order.clone();
+        for key in &registry_keys {
+            let def = match self.entity_registry.defs.get(key) { Some(d) => d, None => continue };
+            let rule = match def.spawn.as_ref() {
+                Some(r) if r.enabled => r,
+                _ => continue,
+            };
+
+            // Hard global cap for this entity type.
+            if key == "sheep" && alive_sheep as u32 >= rule.max_alive { continue; }
+
+            // Pre-resolve block IDs from spawn_on_blocks
+            let allowed_ids: Vec<u8> = rule.spawn_on_blocks.iter()
+                .filter_map(|n| self.block_registry_for_vct.id_for(n))
+                .collect();
+
+            for (chunk_key, samples) in fresh_chunk_surfaces {
+                let mut spawned_in_chunk = 0u32;
+                for &(wx, wy, wz, bid) in samples {
+                    if spawned_in_chunk >= rule.max_per_chunk { break; }
+                    if wy < rule.min_y || wy > rule.max_y { continue; }
+                    if !allowed_ids.is_empty() && !allowed_ids.contains(&bid) { continue; }
+
+                    // Rarity gate — deterministic hash of position so each
+                    // generated chunk produces a stable set of spawns.
+                    let r = position_hash01(wx, wy, wz, self.sheep_spawn_counter);
+                    if r >= rule.rarity { continue; }
+
+                    let spawn_pos = Vec3::new(wx as f32 + 0.5, (wy + 1) as f32, wz as f32 + 0.5);
+                    self.sheep_spawn_counter = self.sheep_spawn_counter.wrapping_add(1);
+
+                    if key == "sheep" {
+                        self.pending_sheep_spawns.push((*chunk_key, spawn_pos, 0.0));
+                        spawned_in_chunk += 1;
+                    }
+                }
+            }
+        }
+    }
+
+    /// Free AI state, EntityManager records, and EntityRenderer GPU instances
+    /// for every entity associated with the given chunk keys.
+    fn despawn_entities_in_chunks(&mut self, chunks: &[(i32, i32, i32)]) {
+        for key in chunks {
+            if let Some(ids) = self.chunk_entities.remove(key) {
+                for id in ids {
+                    self.sheep_ai.remove(&id);
+                    self.entity_manager.despawn(id);
+                    if let Some(ref mut er) = self.entity_renderer {
+                        er.despawn_instance(id);
+                    }
+                    debug_log!("GameScreen", "despawn_entities_in_chunks",
+                        "Despawned entity {:?} from evicted chunk {:?}", id, key);
+                }
+            }
+            // Also drop any queued (not-yet-instantiated) spawns inside this chunk.
+            self.pending_sheep_spawns.retain(|(ck, _, _)| ck != key);
+        }
+    }
+
+    /// Advance every sheep AI by `dt` and apply position/yaw + queued block ops.
+    fn tick_sheep_ai(&mut self, dt: f32) {
+        if self.sheep_ai.is_empty() { return; }
+        let player_pos = self.player.foot_position(&self.physics_world);
+        let snap = self.last_voxel_snapshot.as_ref();
+
+        // Collect (id, pos, yaw) up front to release the borrow on entity_manager.
+        let entries: Vec<(EntityId, Vec3, f32)> = self.sheep_ai.keys()
+            .filter_map(|id| {
+                self.entity_manager.get(*id).map(|e| (
+                    e.id,
+                    e.transform.position,
+                    e.transform.yaw,
+                ))
+            })
+            .collect();
+
+        for (id, pos, yaw) in entries {
+            let Some(ai) = self.sheep_ai.get_mut(&id) else { continue };
+            let result = crate::core::entity_ai::tick_sheep(
+                ai, pos, yaw, dt, snap, &self.block_registry_for_vct, player_pos,
+            );
+            if let Some(entity) = self.entity_manager.get_mut(id) {
+                entity.transform.position = result.new_position;
+                entity.transform.yaw      = result.new_yaw;
+            }
+            for op in result.block_ops {
+                self.pending_block_ops.push(op);
+            }
+        }
+    }
+
     fn process_input(&mut self, _dt: f64) {
         if self.camera_locked && (self.mouse_dx != 0.0 || self.mouse_dy != 0.0) {
+            self.camera.set_sensitivity(config::mouse_sensitivity());
             self.camera.rotate(self.mouse_dx, self.mouse_dy);
         }
         self.mouse_dx = 0.0;
@@ -826,8 +990,20 @@ impl Screen for GameScreen {
             self.last_worker_pending  = result.pending;
             self.biome_ambient_tint   = result.biome_ambient_tint;
 
+            // Process fresh chunk surfaces against entity spawn rules.
+            // Surviving spawn candidates are queued for next-frame GPU instantiation.
+            self.process_entity_spawn_candidates(&result.fresh_chunk_surfaces);
+
+            // Despawn sheep AI state for chunks that were just evicted.
+            if !result.evicted.is_empty() {
+                self.despawn_entities_in_chunks(&result.evicted);
+            }
+
             self.pending_world_result = Some(result);
         }
+
+        // Advance sheep AI (independent of WorldResult arrival cadence).
+        self.tick_sheep_ai(dt as f32);
 
         let update_ms = t_update_start.elapsed().as_secs_f64() * 1000.0;
 
@@ -882,6 +1058,11 @@ impl Screen for GameScreen {
         if self.volumetric_renderer.is_none() {
             self.volumetric_renderer = Some(crate::core::vct::VolumetricRenderer::new(device, format));
         }
+        if self.light_emitter_renderer.is_none() {
+            self.light_emitter_renderer = Some(
+                crate::screens::light_emitter_renderer::LightEmitterRenderer::new(device, format)
+            );
+        }
         if self.pipeline_3d.is_none() {
             let vct = self.vct_system.as_ref().unwrap();
             self.pipeline_3d = Some(Game3DPipeline::new(device, queue, format, &vct.frag_bgl));
@@ -905,6 +1086,54 @@ impl Screen for GameScreen {
                 self.player_renderer    = Some(PlayerRenderer::new(model));
                 self.player_entity_id   = Some(pid);
                 self.entity_renderer    = Some(er);
+            }
+        }
+
+        // Lazy-register the sheep model once the entity renderer exists.
+        if !self.sheep_model_registered && self.entity_renderer.is_some() {
+            if let Ok(json) = std::fs::read_to_string("assets/models/entity/sheep_model.json") {
+                if let Ok(sheep_model) = PlayerModel::from_json(&json) {
+                    if let Some(ref mut er) = self.entity_renderer {
+                        let skin = self.entity_registry.defs.get("sheep")
+                            .and_then(|d| d.skin_path.clone());
+                        er.register_model(
+                            device, queue,
+                            "sheep", &sheep_model,
+                            crate::screens::sheep_renderer::SHEEP_BONE_ORDER,
+                            skin.as_deref(),
+                        );
+                        self.sheep_model_registered = true;
+                        debug_log!("GameScreen", "render", "Registered sheep model");
+                    }
+                } else {
+                    debug_log!("GameScreen", "render", "Failed to parse sheep_model.json");
+                    self.sheep_model_registered = true; // don't retry every frame
+                }
+            } else {
+                self.sheep_model_registered = true;
+            }
+        }
+
+        // Process pending sheep spawns (needs device for GPU instance).
+        if !self.pending_sheep_spawns.is_empty()
+            && self.sheep_model_registered
+            && self.entity_renderer.is_some()
+        {
+            let spawns = std::mem::take(&mut self.pending_sheep_spawns);
+            for (chunk_key, pos, yaw) in spawns {
+                let mut transform = EntityTransform::at(pos);
+                transform.yaw = yaw;
+                let eid = self.entity_manager.spawn(transform, "sheep");
+                if let Some(ref mut er) = self.entity_renderer {
+                    er.spawn_instance(device, eid, "sheep");
+                }
+                let seed = self.world_metadata.as_ref().map(|m| m.seed).unwrap_or(0);
+                let ai = crate::core::entity_ai::SheepAI::new(eid, chunk_key, pos, seed);
+                self.sheep_ai.insert(eid, ai);
+                self.chunk_entities.entry(chunk_key).or_default().push(eid);
+                debug_log!("GameScreen", "render",
+                    "Spawned sheep {:?} at [{:.1},{:.1},{:.1}] (chunk {:?})",
+                    eid, pos.x, pos.y, pos.z, chunk_key);
             }
         }
 
@@ -1288,9 +1517,10 @@ impl Screen for GameScreen {
             });
 
             // Scan voxel snapshot for blocks with inline light_sources.
-            // Builds block_point_lights (PointLightGPU) and spot_lights (SpotLightGPU)
+            // Builds block_point_lights (PointLightGPU) and block_spot_lights (SpotLightGPU)
             // from the JSON-defined light_sources on each BlockDefinition.
             self.spot_lights.clear();
+            self.block_spot_lights.clear();
             self.block_point_lights.clear();
 
             // Pre-build lookup: block_id → &[BlockLightSource] (skips blocks with no sources)
@@ -1344,7 +1574,7 @@ impl Screen for GameScreen {
                                         let outer_cos = ls.focus.to_radians().cos();
                                         let d   = ls.direction;
                                         let len = (d[0]*d[0] + d[1]*d[1] + d[2]*d[2]).sqrt().max(0.001);
-                                        self.spot_lights.push(SpotLightGPU {
+                                        self.block_spot_lights.push(SpotLightGPU {
                                             pos_range:       [lx, ly, lz, range],
                                             dir_inner:       [d[0]/len, d[1]/len, d[2]/len, inner_cos],
                                             color_intensity: [ls.color[0], ls.color[1], ls.color[2], ls.intensity],
@@ -1354,7 +1584,7 @@ impl Screen for GameScreen {
                                 }
 
                                 // Hard cap: 64 of each type
-                                if self.block_point_lights.len() >= 64 || self.spot_lights.len() >= 64 {
+                                if self.block_point_lights.len() >= 64 || self.block_spot_lights.len() >= 64 {
                                     break 'scan;
                                 }
                             }
@@ -1364,7 +1594,7 @@ impl Screen for GameScreen {
 
                 debug_log!("GameScreen", "render",
                     "Snapshot light scan: {} point, {} spot from block light_sources",
-                    self.block_point_lights.len(), self.spot_lights.len());
+                    self.block_point_lights.len(), self.block_spot_lights.len());
             }
         }
         self.last_vct_upload_us = t_vct_upload.elapsed().as_micros();
@@ -1373,11 +1603,30 @@ impl Screen for GameScreen {
         vct.dispatch_gi(encoder, queue);
         self.last_vct_dispatch_us = t_vct_dispatch.elapsed().as_micros();
 
+        // Sync player entity transform so entity-def lights follow the actual player position.
+        if let Some(pid) = self.player_entity_id {
+            let foot = self.player.foot_position(&self.physics_world);
+            if let Some(entity) = self.entity_manager.get_mut(pid) {
+                entity.transform.position = foot;
+                entity.transform.yaw      = self.body_yaw;
+            }
+        }
+
         // Build per-frame point light list:
         //   1. Static block lights (cached from last snapshot scan)
         //   2. Dynamic entity head lights (test entities spawned with G)
+        // Also rebuild emitter_lights in lock-step so billboards stay in sync.
         self.point_lights.clear();
+        self.emitter_lights.clear();
         self.point_lights.extend_from_slice(&self.block_point_lights);
+        for pl in &self.block_point_lights {
+            self.emitter_lights.push(EmitterLight {
+                pos:             Vec3::new(pl.pos_range[0], pl.pos_range[1], pl.pos_range[2]),
+                color:           [pl.color_intensity[0], pl.color_intensity[1], pl.color_intensity[2]],
+                intensity:       pl.color_intensity[3],
+                radius_override: 0.0,
+            });
+        }
         for &eid in &self.test_light_entities {
             if self.point_lights.len() >= 64 { break; }
             if let Some(entity) = self.entity_manager.get(eid) {
@@ -1385,9 +1634,182 @@ impl Screen for GameScreen {
                 self.point_lights.push(PointLightGPU {
                     pos_range:       [p.x, p.y + 1.9, p.z, 20.0],
                     color_intensity: [1.0, 0.9, 0.6, 10.0],
-                    source_voxel:    [0, 0, 0, 0], // entity light — no source block to skip
+                    source_voxel:    [0, 0, 0, 0],
+                });
+                self.emitter_lights.push(EmitterLight {
+                    pos:             Vec3::new(p.x, p.y + 1.9, p.z),
+                    color:           [1.0, 0.9, 0.6],
+                    intensity:       10.0,
+                    radius_override: 0.0,
                 });
             }
+        }
+
+        // Build per-frame spot light list: static block spot lights (cached from last snapshot scan)
+        self.spot_lights.clear();
+        if self.spot_lights.len() < 64 {
+            let remaining = 64 - self.spot_lights.len();
+            let block_count = self.block_spot_lights.len().min(remaining);
+            self.spot_lights.extend_from_slice(&self.block_spot_lights[..block_count]);
+            for sl in &self.block_spot_lights[..block_count] {
+                self.emitter_lights.push(EmitterLight {
+                    pos:             Vec3::new(sl.pos_range[0], sl.pos_range[1], sl.pos_range[2]),
+                    color:           [sl.color_intensity[0], sl.color_intensity[1], sl.color_intensity[2]],
+                    intensity:       sl.color_intensity[3],
+                    radius_override: 0.0,
+                });
+            }
+        }
+
+        // --- Entity-definition lights (from EntityRegistry, per live entity) ---
+        // Toggled by L key (player_spotlight_on).
+        // For the player entity: uses PlayerRenderer::bone_transforms so head-bone lights
+        // correctly follow head pitch + relative yaw, and the bone world position includes
+        // the PLAYER_SIZE scale that the renderer applies.
+        if self.player_spotlight_on {
+            use std::f32::consts::{FRAC_PI_2, PI};
+            use crate::core::entity_definition::LightKind as ELK;
+
+            // Collect entity data to avoid simultaneous borrow with lights vecs.
+            let entity_transforms: Vec<(EntityId, Vec3, f32, String)> = self.entity_manager.iter()
+                .map(|e| (e.id, e.transform.position, e.transform.yaw, e.model_id.clone()))
+                .collect();
+
+            let reg_count = self.entity_registry.defs.len();
+            debug_log!("GameScreen", "render",
+                "Entity-def lights: {} entities in manager, {} defs in registry",
+                entity_transforms.len(), reg_count);
+
+            // Pre-compute exact bone world transforms for the player entity.
+            // This uses the SAME pose that the player renderer uses, including head pitch/yaw.
+            let player_bone_mats: Option<(EntityId, std::collections::HashMap<String, glam::Mat4>)> =
+                self.player_entity_id.map(|pid| {
+                    let head_yaw_offset = angle_diff(self.camera.yaw(), self.body_yaw).clamp(-PI, PI);
+                    let head_pitch = self.camera.pitch();
+                    let pose = PlayerPose {
+                        foot_pos:        self.player.foot_position(&self.physics_world),
+                        body_yaw:        self.body_yaw,
+                        head_yaw_offset,
+                        head_pitch,
+                        walk_phase:      self.walk_phase,
+                        is_walking:      self.is_walking,
+                        view_mode:       self.view_mode,
+                    };
+                    (pid, PlayerRenderer::bone_transforms(&pose))
+                });
+
+            let mut def_point_added = 0usize;
+            let mut def_spot_added  = 0usize;
+
+            for (eid, pos, yaw, model_id) in &entity_transforms {
+                let def = match self.entity_registry.defs.get(model_id) {
+                    Some(d) => d,
+                    None    => {
+                        debug_log!("GameScreen", "render",
+                            "Entity-def lights: no def for model_id '{}' in registry", model_id);
+                        continue;
+                    }
+                };
+                if def.light_sources.is_empty() { continue; }
+
+                let is_player = player_bone_mats.as_ref().map_or(false, |(pid, _)| pid == eid);
+                let bone_mats = if is_player {
+                    player_bone_mats.as_ref().map(|(_, m)| m)
+                } else {
+                    None
+                };
+
+                // Skip the billboard glow for the player's own lights in first-person:
+                // the player would otherwise see a sphere floating right in front of them.
+                let skip_billboard = is_player && self.view_mode == ViewMode::FirstPerson;
+
+                // Fallback rotation for non-player entities (body yaw only).
+                let body_rot = glam::Mat4::from_rotation_y(FRAC_PI_2 - yaw);
+
+                for ls in &def.light_sources {
+                    // --- World-space light position ---
+                    let world = if !ls.bone.is_empty() {
+                        if let Some(bone_mat) = bone_mats.and_then(|b| b.get(&ls.bone)) {
+                            // Player entity with known bone: use the bone's exact world transform.
+                            // bone_mat = base * bone_local; base already encodes foot_pos + body_yaw + PLAYER_SIZE scale.
+                            // ls.position is in block units → divide by PLAYER_SIZE to enter model space.
+                            // Do NOT add bone_piv here: the bone_local matrix already rotates around the pivot,
+                            // so adding it again would double-count the bone's height offset.
+                            bone_mat.transform_point3(Vec3::from(ls.position) / PLAYER_SIZE)
+                        } else {
+                            // Non-player entity or unknown bone: simple body-yaw, ls.position in block units.
+                            *pos + body_rot.transform_point3(Vec3::from(ls.position))
+                        }
+                    } else {
+                        *pos + body_rot.transform_point3(Vec3::from(ls.position))
+                    };
+
+                    let range = if ls.range > 0.0 { ls.range } else { 20.0 };
+                    match ls.kind {
+                        ELK::Point => {
+                            if self.point_lights.len() < 64 {
+                                debug_log!("GameScreen", "render",
+                                    "Entity-def point light '{}': world=[{:.2},{:.2},{:.2}] range={:.1} intensity={:.1}",
+                                    ls.label, world.x, world.y, world.z, range, ls.intensity);
+                                self.point_lights.push(PointLightGPU {
+                                    pos_range:       [world.x, world.y, world.z, range],
+                                    color_intensity: [ls.color[0], ls.color[1], ls.color[2], ls.intensity],
+                                    source_voxel:    [0, 0, 0, 0],
+                                });
+                                if !skip_billboard {
+                                    self.emitter_lights.push(EmitterLight {
+                                        pos:             world,
+                                        color:           ls.color,
+                                        intensity:       ls.intensity,
+                                        radius_override: ls.billboard_radius,
+                                    });
+                                }
+                                def_point_added += 1;
+                            }
+                        }
+                        ELK::Directional => {
+                            if self.spot_lights.len() < 64 {
+                                // Direction: for player bones, rotate through the bone's full world
+                                // transform (includes head pitch + yaw), then normalise (scale cancels).
+                                // For others, only body yaw is applied.
+                                let dir = if !ls.bone.is_empty() {
+                                    if let Some(bone_mat) = bone_mats.and_then(|b| b.get(&ls.bone)) {
+                                        bone_mat.transform_vector3(Vec3::from(ls.direction)).normalize_or_zero()
+                                    } else {
+                                        body_rot.transform_vector3(Vec3::from(ls.direction)).normalize_or_zero()
+                                    }
+                                } else {
+                                    body_rot.transform_vector3(Vec3::from(ls.direction)).normalize_or_zero()
+                                };
+                                let half = ls.focus.to_radians();
+                                let inner_cos = (half * 0.45).cos();
+                                let outer_cos = half.cos();
+                                debug_log!("GameScreen", "render",
+                                    "Entity-def spot light '{}': world=[{:.2},{:.2},{:.2}] dir=[{:.2},{:.2},{:.2}] range={:.1}",
+                                    ls.label, world.x, world.y, world.z, dir.x, dir.y, dir.z, range);
+                                self.spot_lights.push(SpotLightGPU {
+                                    pos_range:       [world.x, world.y, world.z, range],
+                                    dir_inner:       [dir.x, dir.y, dir.z, inner_cos],
+                                    color_intensity: [ls.color[0], ls.color[1], ls.color[2], ls.intensity],
+                                    outer_pad:       [outer_cos, 0.0, 0.0, 0.0],
+                                });
+                                if !skip_billboard {
+                                    self.emitter_lights.push(EmitterLight {
+                                        pos:             world,
+                                        color:           ls.color,
+                                        intensity:       ls.intensity,
+                                        radius_override: ls.billboard_radius,
+                                    });
+                                }
+                                def_spot_added += 1;
+                            }
+                        }
+                    }
+                }
+            }
+            debug_log!("GameScreen", "render",
+                "Entity-def lights added: {} point, {} spot (total now: {} point, {} spot)",
+                def_point_added, def_spot_added, self.point_lights.len(), self.spot_lights.len());
         }
 
         // Upload point lights and spot lights to GPU
@@ -1528,6 +1950,29 @@ impl Screen for GameScreen {
                             &self.day_night,
                             self.lighting_config.ambient.min_level,
                         ));
+                    }
+                }
+
+                // Build render calls for sheep entities
+                {
+                    use crate::screens::sheep_renderer::{SheepRenderer, SheepPose};
+                    for (eid, ai) in &self.sheep_ai {
+                        if let Some(entity) = self.entity_manager.get(*eid) {
+                            let pose = SheepPose {
+                                foot_pos:   entity.transform.position,
+                                yaw:        entity.transform.yaw,
+                                walk_phase: ai.walk_phase,
+                                is_walking: ai.is_walking,
+                            };
+                            all_calls.push(SheepRenderer::build_render_call(
+                                *eid,
+                                &pose,
+                                self.camera.view_projection_matrix(),
+                                self.camera.position,
+                                &self.day_night,
+                                self.lighting_config.ambient.min_level,
+                            ));
+                        }
                     }
                 }
 
@@ -1676,6 +2121,29 @@ impl Screen for GameScreen {
                     elapsed_secs,
                     &self.point_lights,
                     &self.spot_lights,
+                );
+            }
+        }
+
+        // Billboard glow at each active light source position.
+        if let (Some(ler), Some(depth_view)) = (
+            self.light_emitter_renderer.as_mut(),
+            pipeline.depth_view(),
+        ) {
+            if !self.emitter_lights.is_empty() {
+                let cam_fwd   = self.camera.forward();
+                let cam_right = self.camera.right();
+                let cam_up    = cam_right.cross(cam_fwd);
+                ler.render(
+                    encoder,
+                    view,
+                    depth_view,
+                    device,
+                    queue,
+                    self.camera.view_projection_matrix(),
+                    cam_right,
+                    cam_up,
+                    &self.emitter_lights,
                 );
             }
         }
@@ -1901,11 +2369,22 @@ impl Screen for GameScreen {
             lock_color,
         );
 
+        // =================== Flashlight indicator (top center, below cursor lock) ====
+        if self.player_spotlight_on {
+            painter.text(
+                Pos2::new(sw / 2.0, 28.0),
+                Align2::CENTER_TOP,
+                "Flashlight ON",
+                FontId::proportional(14.0),
+                Color32::from_rgba_unmultiplied(255, 240, 180, 180),
+            );
+        }
+
         // =================== Controls (bottom right) ========================
         painter.text(
             Pos2::new(sw - 10.0, sh - 24.0),
             Align2::RIGHT_BOTTOM,
-            "WASD move  Space jump",
+            "WASD move  Space jump  L flashlight",
             FontId::proportional(14.0),
             Color32::from_rgba_unmultiplied(255, 255, 255, 102),
         );
@@ -1974,86 +2453,82 @@ impl Screen for GameScreen {
                 .show(ctx, |ui| {
                     ui.vertical_centered(|ui| {
 
-
-                        ui.add_space(20.0);
-
-                        // --- Vertical Below slider ---
-                        ui.vertical_centered(|ui| {
-                            ui.set_width(320.0);
-
-                            ui.label(
-                                egui::RichText::new("Chunks Below Camera")
-                                    .size(18.0)
-                                    .color(egui::Color32::LIGHT_GRAY),
-                            );
-                            ui.add_space(8.0);
-
-                            let mut vb = config::vertical_below() as f32;
-                            let slider = egui::Slider::new(&mut vb, 1.0..=16.0)
-                                .step_by(1.0)
-                                .suffix(" chunks")
-                                .text("Below");
-                            if ui.add(slider).changed() {
-                                config::set_vertical_below(vb as i32);
-                                debug_log!("SettingsScreen", "build_ui",
-                            "Vertical below -> {}", vb as i32);
-                            }
-
-                            ui.add_space(8.0);
-                            ui.label(
-                                egui::RichText::new(
-                                    "How many chunk layers load below the camera. \
-                             Lower = better underground performance."
-                                )
-                                    .size(12.0)
-                                    .color(egui::Color32::GRAY),
-                            );
-                        });
-
-                        ui.add_space(20.0);
-
-                        // --- Vertical Above slider ---
-                        ui.vertical_centered(|ui| {
-                            ui.set_width(320.0);
-
-                            ui.label(
-                                egui::RichText::new("Chunks Above Camera")
-                                    .size(18.0)
-                                    .color(egui::Color32::LIGHT_GRAY),
-                            );
-                            ui.add_space(8.0);
-
-                            let mut va = config::vertical_above() as f32;
-                            let slider = egui::Slider::new(&mut va, 1.0..=16.0)
-                                .step_by(1.0)
-                                .suffix(" chunks")
-                                .text("Above");
-                            if ui.add(slider).changed() {
-                                config::set_vertical_above(va as i32);
-                                debug_log!("SettingsScreen", "build_ui",
-                            "Vertical above -> {}", va as i32);
-                            }
-
-                            ui.add_space(8.0);
-                            ui.label(
-                                egui::RichText::new(
-                                    "How many chunk layers load above the camera. \
-                             Lower = fewer sky chunks loaded."
-                                )
-                                    .size(12.0)
-                                    .color(egui::Color32::GRAY),
-                            );
-                        });
-                        ui.add_space(8.0);
+                        ui.add_space(10.0);
 
                         ui.label(
-                            egui::RichText::new("Settings")
+                            egui::RichText::new("Pause")
                                 .size(28.0)
                                 .color(Color32::WHITE),
                         );
 
-                        ui.add_space(20.0);
+                        ui.add_space(16.0);
                         ui.separator();
+                        ui.add_space(12.0);
+
+                        // --- Mouse Sensitivity slider ---
+                        ui.vertical_centered(|ui| {
+                            ui.set_width(320.0);
+
+                            ui.label(
+                                egui::RichText::new("Mouse Sensitivity")
+                                    .size(16.0)
+                                    .color(Color32::LIGHT_GRAY),
+                            );
+                            ui.add_space(6.0);
+
+                            let mut sens = config::mouse_sensitivity();
+                            let slider = egui::Slider::new(&mut sens, 0.0005..=0.01)
+                                .step_by(0.0005)
+                                .text("Sensitivity");
+                            if ui.add(slider).changed() {
+                                config::set_mouse_sensitivity(sens);
+                                self.camera.set_sensitivity(sens);
+                                user_settings::save_current();
+                            }
+
+                            ui.add_space(4.0);
+                            ui.label(
+                                egui::RichText::new(
+                                    "Camera rotation speed. Lower = slower, higher = faster."
+                                )
+                                    .size(12.0)
+                                    .color(egui::Color32::GRAY),
+                            );
+                        });
+
+                        ui.add_space(16.0);
+
+                        // --- Fly Speed slider ---
+                        ui.vertical_centered(|ui| {
+                            ui.set_width(320.0);
+
+                            ui.label(
+                                egui::RichText::new("Fly Speed")
+                                    .size(16.0)
+                                    .color(egui::Color32::LIGHT_GRAY),
+                            );
+                            ui.add_space(6.0);
+
+                            let mut fs = config::fly_speed();
+                            let slider = egui::Slider::new(&mut fs, 2.0..=100.0)
+                                .step_by(1.0)
+                                .suffix(" b/s")
+                                .text("Speed");
+                            if ui.add(slider).changed() {
+                                config::set_fly_speed(fs);
+                                user_settings::save_current();
+                            }
+
+                            ui.add_space(4.0);
+                            ui.label(
+                                egui::RichText::new(
+                                    "Movement speed in fly mode (N to toggle)."
+                                )
+                                    .size(12.0)
+                                    .color(egui::Color32::GRAY),
+                            );
+                        });
+
                         ui.add_space(16.0);
 
                         // --- Render Distance ---
@@ -2061,7 +2536,7 @@ impl Screen for GameScreen {
                             ui.set_width(260.0);
 
                             ui.label(
-                                egui::RichText::new("Chunks Load Distance")
+                                egui::RichText::new("Render Distance")
                                     .size(16.0)
                                     .color(Color32::LIGHT_GRAY),
                             );
@@ -2073,6 +2548,7 @@ impl Screen for GameScreen {
                                 .suffix(" chunks");
                             if ui.add(slider).changed() {
                                 config::set_render_distance(rd as i32);
+                                user_settings::save_current();
                             }
                         });
 
@@ -2095,13 +2571,14 @@ impl Screen for GameScreen {
                                 .suffix("x");
                             if ui.add(slider).changed() {
                                 config::set_lod_multiplier(lod_m);
+                                user_settings::save_current();
                             }
 
                             ui.add_space(4.0);
                             ui.label(
                                 egui::RichText::new(
                                     format!(
-                                        "LOD0 ≤{:.0}  LOD1 ≤{:.0}  LOD2 beyond",
+                                        "LOD0 \u{2264}{:.0}  LOD1 \u{2264}{:.0}  LOD2 beyond",
                                         config::LOD_NEAR_BASE * lod_m,
                                         config::LOD_FAR_BASE * lod_m,
                                     )
@@ -2123,9 +2600,21 @@ impl Screen for GameScreen {
                             });
                         });
 
-                        ui.add_space(24.0);
+                        ui.add_space(20.0);
                         ui.separator();
-                        ui.add_space(16.0);
+                        ui.add_space(12.0);
+
+                        // --- Save World ---
+                        let save_btn = egui::Button::new(
+                            egui::RichText::new("Save World").size(18.0),
+                        )
+                            .min_size(egui::vec2(220.0, 42.0));
+
+                        if ui.add(save_btn).clicked() {
+                            self.do_save_world();
+                        }
+
+                        ui.add_space(10.0);
 
                         // --- Resume ---
                         let resume_btn = egui::Button::new(
@@ -2293,6 +2782,11 @@ impl Screen for GameScreen {
                                 }
                                 KeyCode::KeyN => {
                                     self.player.toggle_fly(&mut self.physics_world);
+                                }
+                                KeyCode::KeyL => {
+                                    self.player_spotlight_on = !self.player_spotlight_on;
+                                    debug_log!("GameScreen", "on_event",
+                                        "Player spotlight: {}", self.player_spotlight_on);
                                 }
                                 KeyCode::KeyS => {
                                     let ctrl = self.keys.contains(&PhysicalKey::Code(KeyCode::ControlLeft))

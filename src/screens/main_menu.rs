@@ -9,6 +9,7 @@ use crate::screens::game_screen::GameScreen;
 use crate::screens::settings::SettingsScreen;
 use crate::screens::worldgen_visualizer_screen::WorldGenVisualizerScreen;
 use crate::screens::block_editor_screen::BlockEditorScreen;
+use crate::screens::entity_editor_screen::EntityEditorScreen;
 use crate::core::save_system::{self, WorldMetadata};
 
 // ---------------------------------------------------------------------------
@@ -135,7 +136,7 @@ impl MainMenuScreen {
                 ui.add_space(40.0);
 
                 // --- Worlds button ---
-                if ui.add(egui::Button::new(egui::RichText::new("\u{1F30D}  Worlds").size(22.0))
+                if ui.add(egui::Button::new(egui::RichText::new("Start Game").size(22.0))
                     .min_size(egui::vec2(240.0, 50.0))).clicked()
                 {
                     debug_log!("MainMenuScreen", "draw_main", "Worlds clicked");
@@ -145,7 +146,7 @@ impl MainMenuScreen {
                 ui.add_space(12.0);
 
                 // Quick-play with default world (backward compat)
-                if ui.add(egui::Button::new(egui::RichText::new("\u{25B6}  Quick Play").size(22.0))
+                if ui.add(egui::Button::new(egui::RichText::new("Quick Play Test").size(22.0))
                     .min_size(egui::vec2(240.0, 50.0))).clicked()
                 {
                     debug_log!("MainMenuScreen", "draw_main", "Quick Play clicked");
@@ -154,7 +155,7 @@ impl MainMenuScreen {
 
                 ui.add_space(12.0);
 
-                if ui.add(egui::Button::new(egui::RichText::new("\u{2699}  Settings").size(22.0))
+                if ui.add(egui::Button::new(egui::RichText::new("Settings").size(22.0))
                     .min_size(egui::vec2(240.0, 50.0))).clicked()
                 {
                     debug_log!("MainMenuScreen", "draw_main", "Settings clicked");
@@ -163,7 +164,7 @@ impl MainMenuScreen {
 
                 ui.add_space(12.0);
 
-                if ui.add(egui::Button::new(egui::RichText::new("\u{1F4A8}  World Gen").size(22.0))
+                if ui.add(egui::Button::new(egui::RichText::new("World Gen Editor").size(22.0))
                     .min_size(egui::vec2(240.0, 50.0))).clicked()
                 {
                     debug_log!("MainMenuScreen", "draw_main", "World Gen clicked");
@@ -172,11 +173,20 @@ impl MainMenuScreen {
 
                 ui.add_space(12.0);
 
-                if ui.add(egui::Button::new(egui::RichText::new("\u{1F9F1}  Block Editor").size(22.0))
+                if ui.add(egui::Button::new(egui::RichText::new("Block Editor").size(22.0))
                     .min_size(egui::vec2(240.0, 50.0))).clicked()
                 {
                     debug_log!("MainMenuScreen", "draw_main", "Block Editor clicked");
                     self.pending_action = ScreenAction::Push(Box::new(BlockEditorScreen::new()));
+                }
+
+                ui.add_space(12.0);
+
+                if ui.add(egui::Button::new(egui::RichText::new("Entity Editor").size(22.0))
+                    .min_size(egui::vec2(240.0, 50.0))).clicked()
+                {
+                    debug_log!("MainMenuScreen", "draw_main", "Entity Light Editor clicked");
+                    self.pending_action = ScreenAction::Push(Box::new(EntityEditorScreen::new()));
                 }
 
                 ui.add_space(24.0);
@@ -254,7 +264,7 @@ impl MainMenuScreen {
 
             ui.with_layout(egui::Layout::bottom_up(egui::Align::Center), |ui| {
                 ui.add_space(12.0);
-                if ui.add(egui::Button::new(egui::RichText::new("\u{2190}  Back").size(18.0))
+                if ui.add(egui::Button::new(egui::RichText::new("Back").size(18.0))
                     .min_size(egui::vec2(200.0, 40.0))).clicked()
                 {
                     action = Some(WorldAction::Back);

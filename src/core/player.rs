@@ -10,6 +10,7 @@ use crate::core::physics::PhysicsWorld;
 use crate::core::gameobjects::block::{BlockRegistry, PlacementMode};
 use crate::core::raycast::RaycastResult;
 use crate::core::world_gen::world::BlockOp;
+use crate::core::config;
 
 // ---------------------------------------------------------------------------
 // Константы игрока — стоя
@@ -33,7 +34,6 @@ const PRONE_SPEED: f32      = 1.5;
 // Прыжок и скорость
 const PLAYER_JUMP_VEL: f32  = 7.5;
 const PLAYER_SPEED: f32     = 5.0;
-const FLY_SPEED: f32        = 12.0;
 
 /// Spawn above terrain — surface sits at Y≈128-160.
 const SPAWN: Vec3 = Vec3::new(8.0, 250.0, 30.0);
@@ -232,9 +232,10 @@ impl PlayerController {
             if jump     { fly_dir.y += 1.0; }
             if fly_down { fly_dir.y -= 1.0; }
 
+            let fly_speed = config::fly_speed();
             let speed = if fly_dir.length_squared() > 1e-6 {
                 fly_dir = fly_dir.normalize();
-                FLY_SPEED
+                fly_speed
             } else { 0.0 };
 
             physics.set_linvel(self.body_handle,

@@ -99,6 +99,12 @@ pub static HALO_ENABLED: AtomicU32 = AtomicU32::new(1);
 /// Whether volumetric god rays (spot-light beam quads) are rendered. 1 = enabled.
 pub static VOLUMETRIC_RAYS_ENABLED: AtomicU32 = AtomicU32::new(1);
 
+/// Mouse sensitivity × 10000 (e.g. 30 = 0.003). Controls camera rotation speed.
+pub static MOUSE_SENSITIVITY: AtomicU32 = AtomicU32::new(30);
+
+/// Fly speed in blocks/second (default 12). Persisted in user settings.
+pub static FLY_SPEED: AtomicU32 = AtomicU32::new(12);
+
 // ---------------------------------------------------------------------------
 // Render distance
 // ---------------------------------------------------------------------------
@@ -216,6 +222,26 @@ pub fn volumetric_rays_enabled() -> bool {
 
 pub fn set_volumetric_rays_enabled(v: bool) {
     VOLUMETRIC_RAYS_ENABLED.store(v as u32, Ordering::Relaxed);
+}
+
+pub fn mouse_sensitivity() -> f32 {
+    MOUSE_SENSITIVITY.load(Ordering::Relaxed) as f32 / 10000.0
+}
+
+pub fn set_mouse_sensitivity(v: f32) {
+    let clamped = (v * 10000.0).clamp(5.0, 100.0) as u32;
+    MOUSE_SENSITIVITY.store(clamped, Ordering::Relaxed);
+    debug_log!("Config", "set_mouse_sensitivity", "Mouse sensitivity set to {:.4}", clamped as f32 / 10000.0);
+}
+
+pub fn fly_speed() -> f32 {
+    FLY_SPEED.load(Ordering::Relaxed).clamp(2, 100) as f32
+}
+
+pub fn set_fly_speed(v: f32) {
+    let clamped = v.clamp(2.0, 100.0) as u32;
+    FLY_SPEED.store(clamped, Ordering::Relaxed);
+    debug_log!("Config", "set_fly_speed", "Fly speed set to {}", clamped);
 }
 
 /// Compute the LOD level for a chunk at the given chunk coordinates.

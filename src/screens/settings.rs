@@ -105,7 +105,34 @@ impl Screen for SettingsScreen {
 
                     ui.add_space(20.0);
 
-                    // --- Vertical Below slider ---
+                    // --- Mouse Sensitivity slider ---
+                    ui.label(
+                        egui::RichText::new("Mouse Sensitivity")
+                            .size(18.0)
+                            .color(egui::Color32::LIGHT_GRAY),
+                    );
+                    ui.add_space(8.0);
+
+                    let mut sens = config::mouse_sensitivity();
+                    let slider = egui::Slider::new(&mut sens, 0.0005..=0.01)
+                        .step_by(0.0005)
+                        .text("Sensitivity");
+                    if ui.add(slider).changed() {
+                        config::set_mouse_sensitivity(sens);
+                        user_settings::save_current();
+                        debug_log!("SettingsScreen", "build_ui",
+                            "Mouse sensitivity -> {:.4}", sens);
+                    }
+                    ui.add_space(8.0);
+                    ui.label(
+                        egui::RichText::new(
+                            "Camera rotation speed. Lower = slower, higher = faster."
+                        )
+                        .size(12.0)
+                        .color(egui::Color32::GRAY),
+                    );
+
+                    ui.add_space(20.0);
                     ui.label(
                         egui::RichText::new("Chunks Below Camera")
                             .size(18.0)

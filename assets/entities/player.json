@@ -1,0 +1,36 @@
+{
+  "default_scale": 1.4500000476837158,
+  "description": "Default player entity.",
+  "display_name": "Player",
+  "format_version": 1,
+  "id": "player",
+  "light_sources": [
+    {
+      "billboard_radius": 0.20000000298023224,
+      "bone": "head",
+      "color": [
+        1.0,
+        1.0,
+        0.8999999761581421
+      ],
+      "direction": [
+        -0.0,
+        -0.30000001192092896,
+        0.9539391994476318
+      ],
+      "focus": 70.0,
+      "intensity": 6.0,
+      "kind": "directional",
+      "label": "flashlight",
+      "position": [
+        -0.0,
+        1.9500000476837158,
+        0.30000001192092896
+      ],
+      "range": 30.0
+    }
+  ],
+  "model_path": "assets/player_model.json",
+  "skin_path": "assets/textures/entity/player/player_skin.png",
+  "spawn": null
+}

@@ -216,12 +216,14 @@ impl World {
 
     /// Load chunks around `camera_pos` and unload ones too far away.
     /// Uses cylindrical shape (dx²+dz² ≤ rd²) and prioritizes view direction.
-    /// Returns `(changed, evicted, gen_time_us, pending)`.
+    /// Returns `(changed, evicted, gen_time_us, pending, fresh_chunk_keys)`.
+    /// `fresh_chunk_keys` lists chunks that were newly inserted this update —
+    /// used by the worker to harvest entity-spawn candidates only once per chunk.
     pub fn update(
         &mut self,
         camera_pos: Vec3,
         camera_forward: Vec3,
-    ) -> (bool, Vec<(i32, i32, i32)>, u128, usize) {
+    ) -> (bool, Vec<(i32, i32, i32)>, u128, usize, Vec<(i32, i32, i32)>) {
         let rd      = config::render_distance();
         let v_below = config::vertical_below();
         let v_above = config::vertical_above();
@@ -275,6 +277,7 @@ impl World {
 
         let mut changed = false;
         let mut gen_time_us: u128 = 0;
+        let mut fresh_chunk_keys: Vec<(i32, i32, i32)> = Vec::new();
 
         if !to_generate.is_empty() {
             let t0 = Instant::now();
@@ -330,6 +333,7 @@ impl World {
                 if has_fluid {
                     self.fluid_sim.mark_dirty(key);
                 }
+                fresh_chunk_keys.push(key);
                 self.chunks.insert(key, chunk);
             }
 
@@ -387,7 +391,70 @@ impl World {
         }
         self.last_lod_counts = lod_counts;
 
-        (changed, evicted, gen_time_us, if was_truncated { total_pending - gen_count } else { 0 })
+        (
+            changed,
+            evicted,
+            gen_time_us,
+            if was_truncated { total_pending - gen_count } else { 0 },
+            fresh_chunk_keys,
+        )
+    }
+
+    /// Sample the top surface of a chunk for entity-spawn candidates.
+    ///
+    /// Returns up to `sample_count` entries of `(wx, wy_surface, wz, surface_block_id)`
+    /// where `wy_surface` is the world Y of the topmost non-air solid block in
+    /// that column, and `surface_block_id` is that block's ID.  Columns with
+    /// no surface (or covered by liquid) are skipped.
+    pub fn sample_chunk_surface(
+        &self,
+        chunk_key:    (i32, i32, i32),
+        sample_count: usize,
+    ) -> Vec<(i32, i32, i32, u8)> {
+        let chunk = match self.chunks.get(&chunk_key) {
+            Some(c) => c,
+            None    => return Vec::new(),
+        };
+        let csx = config::chunk_size_x();
+        let csy = config::chunk_size_y();
+        let csz = config::chunk_size_z();
+        let wx_base = chunk_key.0 * csx as i32;
+        let wy_base = chunk_key.1 * csy as i32;
+        let wz_base = chunk_key.2 * csz as i32;
+
+        // Deterministic stride sampling — picks `sample_count` columns spread
+        // across the chunk footprint so each chunk gives a stable set.
+        let total_cols = csx * csz;
+        let stride = (total_cols / sample_count.max(1)).max(1);
+        let mut out = Vec::with_capacity(sample_count);
+
+        for n in 0..sample_count {
+            let col_idx = (n * stride) % total_cols;
+            let bx = col_idx % csx;
+            let bz = col_idx / csx;
+
+            // Scan from the top downward for the first solid block.
+            let mut found = false;
+            for by in (0..csy).rev() {
+                let bid = chunk.get(bx, by, bz);
+                if bid == 0 { continue; }
+                // Skip if covered by another block at by+1 (we want top surface only).
+                if by + 1 < csy && chunk.get(bx, by + 1, bz) != 0 { continue; }
+                // Skip fluids — sheep shouldn't stand on water.
+                if self.fluid_sim.is_fluid(bid) { continue; }
+                out.push((
+                    wx_base + bx as i32,
+                    wy_base + by as i32,
+                    wz_base + bz as i32,
+                    bid,
+                ));
+                found = true;
+                break;
+            }
+            let _ = found;
+        }
+
+        out
     }
 
     // -------------------------------------------------------------------
@@ -858,6 +925,11 @@ pub struct WorldResult {
     /// Chunk keys whose meshes were rebuilt this frame.
     /// Used by GameScreen to refresh block model entity spawns for those chunks.
     pub meshed_chunk_keys: Vec<(i32, i32, i32)>,
+    /// Per-chunk top-surface samples for chunks freshly generated this update.
+    /// Each entry: `(chunk_key, samples)` where `samples` is a list of
+    /// `(wx, wy_surface, wz, surface_block_id)` columns.  Consumed by the
+    /// game screen to drive natural entity spawning.
+    pub fresh_chunk_surfaces: Vec<((i32, i32, i32), Vec<(i32, i32, i32, u8)>)>,
 }
 
 /// Rotate an AABB (block-local coords, origin = block corner, pivot = (0.5, 0, 0.5)) by a
@@ -940,8 +1012,15 @@ impl WorldWorker {
                                 }
                             }
 
-                            let (changed, evicted, gen_time, pending) =
+                            let (changed, evicted, gen_time, pending, fresh_chunk_keys) =
                                 world.update(camera_pos, camera_forward);
+
+                            // Harvest top-surface samples from chunks that were just generated.
+                            // Done before block_ops so player edits never overlap fresh-chunk spawn data.
+                            let fresh_chunk_surfaces: Vec<((i32, i32, i32), Vec<(i32, i32, i32, u8)>)> =
+                                fresh_chunk_keys.iter()
+                                    .map(|&key| (key, world.sample_chunk_surface(key, 8)))
+                                    .collect();
 
                             for op in &block_ops {
                                 match op {
@@ -1211,6 +1290,7 @@ impl WorldWorker {
                                 foot_block_above,
                                 model_block_positions,
                                 meshed_chunk_keys,
+                                fresh_chunk_surfaces,
                             });
                         }
                         Ok(WorldRequest::SaveAll { world_dir }) => {
@@ -1280,8 +1360,12 @@ impl WorldWorker {
                                     chunk.mesh_dirty = true;
                                 }
                             }
-                            let (changed, evicted, gen_time, pending) =
+                            let (changed, evicted, gen_time, pending, fresh_chunk_keys) =
                                 world.update(camera_pos, camera_forward);
+                            let fresh_chunk_surfaces: Vec<((i32, i32, i32), Vec<(i32, i32, i32, u8)>)> =
+                                fresh_chunk_keys.iter()
+                                    .map(|&key| (key, world.sample_chunk_surface(key, 8)))
+                                    .collect();
                             for op in &block_ops {
                                 match op {
                                     BlockOp::Break { x, y, z } => { world.remove_block(*x, *y, *z); }
@@ -1406,6 +1490,7 @@ impl WorldWorker {
                                 raycast_result, physics_ready, voxel_snapshot, lod_counts,
                                 dirty_count, worker_total_us, biome_ambient_tint,
                                 foot_block, foot_block_above, model_block_positions, meshed_chunk_keys,
+                                fresh_chunk_surfaces,
                             });
                         }
                         Ok(WorldRequest::SaveAll { world_dir }) => {

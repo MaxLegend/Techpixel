@@ -129,6 +129,10 @@ impl Camera {
             .clamp(-89.0_f32.to_radians(), 89.0_f32.to_radians());
     }
 
+    pub fn set_sensitivity(&mut self, sens: f32) {
+        self.sensitivity = sens;
+    }
+
     pub fn view_matrix(&self) -> Mat4 {
         Mat4::look_to_rh(self.position, self.forward(), Vec3::Y)
     }
