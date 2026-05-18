@@ -1,3 +1,4 @@
+#![allow(unused_mut)]
 mod core;
 mod screens;
 

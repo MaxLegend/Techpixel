@@ -1,0 +1,735 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
+    <Fragment>
+        <DirectoryRef Id="Bin">
+            <Directory Id="dir4ED8DE55273CFF2D76869D44F9B7C7B3" Name="assets">
+                <Component Id="cmpAFAE6A4BE070A22BFB9096EE40A136FF" Guid="{E8AC1211-6AB1-4C02-B2DA-8339DB4569E3}">
+                    <File Id="fil0D58A0A0C3E74C23DF024DC88CAAA4BD" KeyPath="yes" Source="assets\chunk_config.json" />
+                </Component>
+                <Component Id="cmpE4141B578D28B96EDABC3907693AE97F" Guid="{09563DEE-A66C-4035-892F-8DCA2DA4F38E}">
+                    <File Id="filB072CE8556AD5E18BE031D38B53AEB3C" KeyPath="yes" Source="assets\icon.png" />
+                </Component>
+                <Component Id="cmp1D2F67274769AEC923740380E65F27C5" Guid="{E9275F3F-46F5-4F83-AFB1-ED7E509F1D07}">
+                    <File Id="filC80ADD727D5B3519B7F6490F729DB395" KeyPath="yes" Source="assets\lighting_config.json" />
+                </Component>
+                <Component Id="cmpFA13B461AB3496C213A851D8E7930E43" Guid="{6EAB9C53-C3D7-497E-9B97-18450505CEF2}">
+                    <File Id="filD26E64FD31C87BC1E455FA1E53143845" KeyPath="yes" Source="assets\player_model.json" />
+                </Component>
+                <Component Id="cmp2523425BB89A2A3FB8BD97D842EACD19" Guid="{D5DCEBB1-FFE9-4740-9F5D-49FAB9590B0A}">
+                    <File Id="filFA8BCD88058B166DD7BEEA2279418E99" KeyPath="yes" Source="assets\world_gen_config.json" />
+                </Component>
+                <Directory Id="dir2774517ACF259801FBFEE4E53B58A6E4" Name="blocks">
+                    <Component Id="cmpD1C971F2E7A61F640371F56CE598D436" Guid="{43ABCE2C-F673-4E65-8AAE-1E7B08E29088}">
+                        <File Id="filA9D1D6895732315B9F0D10FE113FFEAA" KeyPath="yes" Source="assets\blocks\block_registry.json" />
+                    </Component>
+                    <Component Id="cmp99378C9C7889CAB9BE4226C2D58765C7" Guid="{0754F636-067C-4E28-83B4-FA7C1B9C5340}">
+                        <File Id="fil9EB01ABEDA6F0B2A69F988B601A1171D" KeyPath="yes" Source="assets\blocks\dirt.json" />
+                    </Component>
+                    <Component Id="cmp6EC3D6F4FC24B764732977E64F20B461" Guid="{146E0A6F-CB28-4FA5-9D00-211840F62600}">
+                        <File Id="fil4A08AD76576EF5A909EF7E122235F574" KeyPath="yes" Source="assets\blocks\glass.json" />
+                    </Component>
+                    <Component Id="cmp91D1DFB3CB25E3AE9920C04DBAFB3074" Guid="{CE82FADC-79D7-40F2-B4DB-E9519DAA815A}">
+                        <File Id="fil87582621BCE2B0F597395C3338485B80" KeyPath="yes" Source="assets\blocks\glass_red.json" />
+                    </Component>
+                    <Component Id="cmp9E7C0050A466EE73AAC0482940875508" Guid="{FDDAA16B-91A2-4963-99C6-DC2B0F6F4F63}">
+                        <File Id="fil7197FBEA668EABD7E7F2E1E8C11FE0B4" KeyPath="yes" Source="assets\blocks\glowstone.json" />
+                    </Component>
+                    <Component Id="cmpB7C7F059E13AEED7963FBAFD5290941C" Guid="{8A7D1821-3B3C-4E86-B241-A0DE1F11940E}">
+                        <File Id="filC6C82578BB2AB3B8468AF60EFD35BF33" KeyPath="yes" Source="assets\blocks\grass.json" />
+                    </Component>
+                    <Component Id="cmpE8960D7C4DEF78A5BE9891BE5BAF0609" Guid="{09829820-60B4-482E-84D7-F3D2B38BC4C5}">
+                        <File Id="fil94292D57FC23F00A0C87C609D048F3B7" KeyPath="yes" Source="assets\blocks\gravel.json" />
+                    </Component>
+                    <Component Id="cmp2604BCDC060AD91634F21A2DF7127A2A" Guid="{5218784F-7C2D-4DAB-B228-7062652FD31F}">
+                        <File Id="fil1E39FB31B928091FBE90B2AD2E7A4A2E" KeyPath="yes" Source="assets\blocks\ice.json" />
+                    </Component>
+                    <Component Id="cmp1ED3D4B5585F964CBEE7E6E557C5396F" Guid="{99D13C93-D62E-4AEE-ADC9-54ACC85D2E8B}">
+                        <File Id="fil6960D73FF200EACA39EFCE6B83423AD9" KeyPath="yes" Source="assets\blocks\lava.json" />
+                    </Component>
+                    <Component Id="cmpBE0F44BF516F6BA7360DC59EF9F8CF00" Guid="{EA396250-B83D-4CA6-B5C3-33E6AD163FA8}">
+                        <File Id="fil17F8706DED551AAB3668BE7E6DBDE10A" KeyPath="yes" Source="assets\blocks\redstone_furnace.json" />
+                    </Component>
+                    <Component Id="cmp127A4E02E8C939FA067B986F6D2122AA" Guid="{737FDD17-F042-4744-A7FE-19E0B1B228D8}">
+                        <File Id="fil2AB1F0100DB2BF910A2602411D75FBFA" KeyPath="yes" Source="assets\blocks\sand.json" />
+                    </Component>
+                    <Component Id="cmp5F6A127AA077454A319FE085CD876977" Guid="{89CD2473-47C8-4BDE-B553-31C54BD57146}">
+                        <File Id="filFB89F3E9DABAC76D9EF359EC9E2E50B0" KeyPath="yes" Source="assets\blocks\snow.json" />
+                    </Component>
+                    <Component Id="cmpF030A1D964B02276B0D2F1F9D5A24DCE" Guid="{F8C474B1-7EAC-44F8-9BB2-31CC8EF3E268}">
+                        <File Id="fil0A751FF6F757C5FC147F69B8475B0679" KeyPath="yes" Source="assets\blocks\spotlight.json" />
+                    </Component>
+                    <Component Id="cmpA7ABD15A04744C20750B3C61B0337BBE" Guid="{8F70E17A-C63E-4619-B668-33A28EACC1AC}">
+                        <File Id="filB5FC2CE6E2F466890DC306BB74CA9DB2" KeyPath="yes" Source="assets\blocks\stone.json" />
+                    </Component>
+                    <Component Id="cmpD5B039A4E0CF59C66DDDA4DA35A41565" Guid="{B930769E-7BB0-4D52-9B84-0701C305F59A}">
+                        <File Id="fil8A69702ABF727569FDBF7075F59E7D0F" KeyPath="yes" Source="assets\blocks\test_block.json" />
+                    </Component>
+                    <Component Id="cmp220017FD5EA8ACB940B7A187189665E0" Guid="{8EF6A48E-66CF-4CA9-8E56-E65AFAF0C494}">
+                        <File Id="fil3377F07009B48A692B3545B234B724A4" KeyPath="yes" Source="assets\blocks\test_model_be.json" />
+                    </Component>
+                    <Component Id="cmp543F690389103CC9910E3E78DAE709D2" Guid="{6AC59C72-3B4E-43DE-80FD-72AB445316F8}">
+                        <File Id="filD45DC4046A3AE72F590EC016996EB089" KeyPath="yes" Source="assets\blocks\water.json" />
+                    </Component>
+                    <Directory Id="dir138E60ADC1096EEF1018923E0741CB70" Name="clay">
+                        <Component Id="cmpD3518DFE66B11B08148CF2A14E8A4DF4" Guid="{810F93D4-F3DB-4371-BA7D-0405A21326DE}">
+                            <File Id="fil04C4384CB3EC0FAC00E7C8E832B226FD" KeyPath="yes" Source="assets\blocks\clay\clay_andesite.json" />
+                        </Component>
+                        <Component Id="cmpEB0194B65324114F43EE0D3941234FAB" Guid="{58485035-7744-4CFD-A31C-A78A487C7E26}">
+                            <File Id="fil3EA334C9BD0E01570C1602B3F3766B46" KeyPath="yes" Source="assets\blocks\clay\clay_basalt.json" />
+                        </Component>
+                        <Component Id="cmp633A920BE93AD9D7326A53CB2B16671E" Guid="{D516DAE3-002C-479C-9C7A-E6070583A4EF}">
+                            <File Id="fil996081C76FC74ACB1E90EDEF04655E86" KeyPath="yes" Source="assets\blocks\clay\clay_gneiss.json" />
+                        </Component>
+                        <Component Id="cmp17D1930C3FE1B2F265775F83C59ACD97" Guid="{FC8C597C-5994-451C-BC5C-33D2236390CA}">
+                            <File Id="fil05E5B33A7E3236D30220D178476BC852" KeyPath="yes" Source="assets\blocks\clay\clay_granite.json" />
+                        </Component>
+                        <Component Id="cmpEA59096B0D91894D22261CB4CBCF8BA8" Guid="{C67CF48E-3DB5-4DC9-9990-B06F2B044D9D}">
+                            <File Id="filA4D528A104F9AEFE4DC2F2309701AE9B" KeyPath="yes" Source="assets\blocks\clay\clay_kimberlite.json" />
+                        </Component>
+                        <Component Id="cmp36BB42CB3B5CC11C07064CCE60EA85CF" Guid="{6E6AE938-CFA6-4AC0-AB8E-C089A06F38B8}">
+                            <File Id="filE305A27C90E47B7B1C47A9F32C55C613" KeyPath="yes" Source="assets\blocks\clay\clay_lherzolite.json" />
+                        </Component>
+                        <Component Id="cmp62EE21F20BA6025281ECD9BFD4E3B51A" Guid="{BDA2A631-39F3-4A85-B0CC-417F41E44B7F}">
+                            <File Id="fil0EC5E601785C3F83B7B537A590DC7AFE" KeyPath="yes" Source="assets\blocks\clay\clay_limestone.json" />
+                        </Component>
+                        <Component Id="cmp93A092DDACADC86A918A68109B158465" Guid="{56B8B09A-66B4-44D4-9D82-FF03A8DBCB00}">
+                            <File Id="fil2BE25059B86E7277C6BF96B622FE90A3" KeyPath="yes" Source="assets\blocks\clay\clay_marble.json" />
+                        </Component>
+                        <Component Id="cmp2C8D25D5771C92FBEF56DB902305A62D" Guid="{2C1A3551-B638-4BF8-89AA-7534224C128C}">
+                            <File Id="filF921A867332993FDDB3776905EA7A8AC" KeyPath="yes" Source="assets\blocks\clay\clay_ophiolite.json" />
+                        </Component>
+                        <Component Id="cmpB92F21F3833F51261ADC2D974D216A5C" Guid="{57E39FB4-A811-4CC1-9A3D-152CAB3E9F00}">
+                            <File Id="filC08C01E431AD42AD84776BC5E1BB607E" KeyPath="yes" Source="assets\blocks\clay\clay_sandstone.json" />
+                        </Component>
+                        <Component Id="cmp28FB0816ACAE8E8F41DF8603B4A443FE" Guid="{AF38472A-4987-4278-939C-9EB55937D3CA}">
+                            <File Id="fil9B9A1C93BAE5BDD0F16A67E2A3020084" KeyPath="yes" Source="assets\blocks\clay\clay_schist.json" />
+                        </Component>
+                        <Component Id="cmp4E66EE2D97A7B1B77700FD834C567560" Guid="{D0D257C7-AB86-441E-85E8-C723C82D6743}">
+                            <File Id="filE4CF03D64E74E73B0B5DEBC48C7604B0" KeyPath="yes" Source="assets\blocks\clay\clay_slate.json" />
+                        </Component>
+                    </Directory>
+                    <Directory Id="dir5AE494C6743B52837E45D805FE41CBE2" Name="claystone">
+                        <Component Id="cmp902B88EC700938B69A50D086DE9E1F1D" Guid="{1349E632-02E7-46D5-869E-8D8D1598BAEC}">
+                            <File Id="fil16C086B30E442BD7E6A648BDAE9B39E2" KeyPath="yes" Source="assets\blocks\claystone\claystone_andesite.json" />
+                        </Component>
+                        <Component Id="cmp1EDFEB118FBA953C1696D866E5FC7BCA" Guid="{00E382E9-5DAB-41C5-8ED9-EE50BC2E44C1}">
+                            <File Id="fil5F23374B6EEF5DE651A2077E6F0FDEA6" KeyPath="yes" Source="assets\blocks\claystone\claystone_basalt.json" />
+                        </Component>
+                        <Component Id="cmp715A5DE7D260136D140EE830E84C700C" Guid="{9D49215B-D9A3-43DF-B569-F10D8BFB9D70}">
+                            <File Id="filF1E7E918F2F11482D34AB747AD859823" KeyPath="yes" Source="assets\blocks\claystone\claystone_gneiss.json" />
+                        </Component>
+                        <Component Id="cmpFAB53E8B1010E7B58D7AAE58740571A2" Guid="{3D176FDD-B83F-4586-910D-62AF2888C347}">
+                            <File Id="fil9999100D2E54F55F98067A329529329F" KeyPath="yes" Source="assets\blocks\claystone\claystone_granite.json" />
+                        </Component>
+                        <Component Id="cmp8BF380BB5C202172D023ED265EFBFC2D" Guid="{0E235900-A2E0-4B66-8CA0-72529CFE7CE6}">
+                            <File Id="fil648D690B9213EE94DC8801BDA6E47133" KeyPath="yes" Source="assets\blocks\claystone\claystone_kimberlite.json" />
+                        </Component>
+                        <Component Id="cmp8D9050E8DCFD83F902622CB26F86D128" Guid="{49B8EFAB-A9B8-4E7D-B54C-4C5A9C19DDDF}">
+                            <File Id="fil4F5E5688DA7BDCE19B082EB63A5D8E87" KeyPath="yes" Source="assets\blocks\claystone\claystone_lherzolite.json" />
+                        </Component>
+                        <Component Id="cmpB4E98365F1B7F1F89F3184D94FDBD2FB" Guid="{8E972C11-381C-41A2-A3FE-8636B18CE8AA}">
+                            <File Id="fil7898419C2525E66912CFD0C16B2F6536" KeyPath="yes" Source="assets\blocks\claystone\claystone_limestone.json" />
+                        </Component>
+                        <Component Id="cmpAB03B3D71DF740EAEB5C8C174478106A" Guid="{B21711F7-8FF9-4075-97FB-840861B5BB5C}">
+                            <File Id="fil3F1C356335553098F1589AC802A8AAB3" KeyPath="yes" Source="assets\blocks\claystone\claystone_marble.json" />
+                        </Component>
+                        <Component Id="cmp267EF760A590EB176904406F3B19A3DA" Guid="{3CA37AC1-74F9-4045-8DF3-4A9D424242A2}">
+                            <File Id="filECB645A0BED5FCB08049714B69D80E60" KeyPath="yes" Source="assets\blocks\claystone\claystone_ophiolite.json" />
+                        </Component>
+                        <Component Id="cmpC386BD987A3AB240F054245AB02BD581" Guid="{A802074B-4B86-45D8-A9F6-BFF49D08C9FD}">
+                            <File Id="fil6CA586B71FB4D38F5BA41A82FA38EBDB" KeyPath="yes" Source="assets\blocks\claystone\claystone_sandstone.json" />
+                        </Component>
+                        <Component Id="cmp67F2C25EBD4D8C35C00E8E281A6FB04B" Guid="{709995DE-DFEF-4B12-AE0F-35D0E54886C3}">
+                            <File Id="fil9C994BE23168AAB3B604F8EAEECC8ABF" KeyPath="yes" Source="assets\blocks\claystone\claystone_schist.json" />
+                        </Component>
+                        <Component Id="cmp94D5E283B4FE47C19E796BD2DA2AAC79" Guid="{DDA06500-A4BE-44D9-A679-2AEC24A8860A}">
+                            <File Id="filF814FE15E4AAD54E07747981697D9E7C" KeyPath="yes" Source="assets\blocks\claystone\claystone_slate.json" />
+                        </Component>
+                    </Directory>
+                    <Directory Id="dirBF08E16CCB2A545074759A6F702A08D8" Name="dirt">
+                        <Component Id="cmpE6A2D73FBD597ED0F68811074BD5B944" Guid="{4A1E9CCA-D373-441F-9329-A0560DED06A2}">
+                            <File Id="filB90BCC39496C0ED41A7288365789DCAF" KeyPath="yes" Source="assets\blocks\dirt\dirt_andesite.json" />
+                        </Component>
+                        <Component Id="cmp83D0E76098C5544051675AF825DE24B8" Guid="{E541528F-FC33-4C6F-B299-49052F068D31}">
+                            <File Id="filBAC829420BCC8C50BEB2EB3DF6E4116E" KeyPath="yes" Source="assets\blocks\dirt\dirt_basalt.json" />
+                        </Component>
+                        <Component Id="cmp4392C32E4707C7EC998EE26345E02F10" Guid="{810C6938-76D0-4F41-B1FC-BA42734878F7}">
+                            <File Id="fil53297647CBF9341365B88A76E69A81EB" KeyPath="yes" Source="assets\blocks\dirt\dirt_gneiss.json" />
+                        </Component>
+                        <Component Id="cmp1B158B11F88B48E81065E6F0495BAFFB" Guid="{69F8F4EE-0F2A-4D96-9139-5C194DA85A9E}">
+                            <File Id="fil05D37952D1F112FC37CE4FBE09AD1FB2" KeyPath="yes" Source="assets\blocks\dirt\dirt_granite.json" />
+                        </Component>
+                        <Component Id="cmpA8A5BB34CEF594892A47FEA29BC0A9B2" Guid="{4A4CE43C-172E-4293-97FD-8C3632044D12}">
+                            <File Id="filA57520042053C61F4A3AEE523C3968A2" KeyPath="yes" Source="assets\blocks\dirt\dirt_kimberlite.json" />
+                        </Component>
+                        <Component Id="cmp4FC79A12DA51CE205D50534A85B84D62" Guid="{63656A08-FC4E-47B4-82BC-13BFD6DDE855}">
+                            <File Id="filA17A8BD4A39EBFAD9B0366C7CFF7C35F" KeyPath="yes" Source="assets\blocks\dirt\dirt_lherzolite.json" />
+                        </Component>
+                        <Component Id="cmp8B3DEAEFBBE19E0BE8C5881DA6953017" Guid="{66E36115-3EBB-4001-BF6F-5C91C0DC59C3}">
+                            <File Id="filDA48488CC9962F6A4B9DDF0AC15359BB" KeyPath="yes" Source="assets\blocks\dirt\dirt_limestone.json" />
+                        </Component>
+                        <Component Id="cmpAED16ED263B3A3F7E664197FEF7C5946" Guid="{97400FF9-1A3D-4C42-98A6-3943DF9AA937}">
+                            <File Id="fil5EF0CB1E28E1BC611F93C4A5727E501B" KeyPath="yes" Source="assets\blocks\dirt\dirt_marble.json" />
+                        </Component>
+                        <Component Id="cmp34EC2848B27A6520909990CE2C874D20" Guid="{4A31DB19-8E0C-4F81-BF9A-90644330DC0C}">
+                            <File Id="fil32687042EF51D964FFF40818DB9E6B71" KeyPath="yes" Source="assets\blocks\dirt\dirt_ophiolite.json" />
+                        </Component>
+                        <Component Id="cmp508A6D7B8A6FD6D8E374F09773CB7B6F" Guid="{6571C0FE-EEE2-46D7-BFF3-734907AB44F2}">
+                            <File Id="fil0317CE3606D4E09FDC4C3DEB32AFC05D" KeyPath="yes" Source="assets\blocks\dirt\dirt_sandstone.json" />
+                        </Component>
+                        <Component Id="cmpDA50C5C003117ED5941731B46C5BF2FC" Guid="{2F1C2CDF-3C14-4049-8B5D-C16405E3F272}">
+                            <File Id="filB7C30ED23204514F0066A477DC3001EF" KeyPath="yes" Source="assets\blocks\dirt\dirt_schist.json" />
+                        </Component>
+                        <Component Id="cmpE587744CCF4ADB5268781C48AA9B43D6" Guid="{12DE51D7-6E28-4B2F-B7AE-BB9FC6C5EA61}">
+                            <File Id="fil43DCF1706CFA46A13497195F679F35BE" KeyPath="yes" Source="assets\blocks\dirt\dirt_slate.json" />
+                        </Component>
+                    </Directory>
+                    <Directory Id="dir1972A1704A19761FB624D0E7001DFE1D" Name="grass">
+                        <Component Id="cmpFD0F01ECDEC6954581EB33D3A02703B7" Guid="{ED917BBC-54F8-4277-AEB7-9ABD263BBA75}">
+                            <File Id="fil4E81C2D19725FD13E465A988E92ED399" KeyPath="yes" Source="assets\blocks\grass\grass_andesite.json" />
+                        </Component>
+                        <Component Id="cmp5E71DBBB6FD5AE9B6A2AAD8FA442E031" Guid="{E0B67DF9-C488-48BE-BBA1-E1B05BD00611}">
+                            <File Id="fil194124BD7A93B547C36C09087B4FD83C" KeyPath="yes" Source="assets\blocks\grass\grass_basalt.json" />
+                        </Component>
+                        <Component Id="cmp795625653DB61C2693F1606BFD7DE518" Guid="{29EE91CA-F983-43FE-98DD-46B748B3A551}">
+                            <File Id="fil24A0468FDF63020F1B8548F11758ABCF" KeyPath="yes" Source="assets\blocks\grass\grass_gneiss.json" />
+                        </Component>
+                        <Component Id="cmp1D5A700B4FD9E72019448ED3688F7AAB" Guid="{E40A704E-4FAF-47FE-838C-2761AD9EB47B}">
+                            <File Id="fil01343CD7E27B84E47352E5BF756AE1BD" KeyPath="yes" Source="assets\blocks\grass\grass_granite.json" />
+                        </Component>
+                        <Component Id="cmpCF6EC7B4B8FE7A5DFCC19693F83F29BC" Guid="{20EE8AE4-5CCB-48C3-BAF2-BE2DD34B2EE7}">
+                            <File Id="fil3729B5F01F5A9FC3A5D32863A15911AD" KeyPath="yes" Source="assets\blocks\grass\grass_kimberlite.json" />
+                        </Component>
+                        <Component Id="cmp7706DBA60F16D0508AE210D246BC312B" Guid="{FEB9E3C2-C2A8-4AA0-A0E3-C2600A2FF5A6}">
+                            <File Id="fil7594FFE4A3B38BF81FEDEE666B6FF06A" KeyPath="yes" Source="assets\blocks\grass\grass_lherzolite.json" />
+                        </Component>
+                        <Component Id="cmpDE72723DC957D9964FD6135070FE0A21" Guid="{E69474FA-9354-460A-860F-4B99FFA0BB6E}">
+                            <File Id="fil3B69C243B3E24CE84A642E806CC211CB" KeyPath="yes" Source="assets\blocks\grass\grass_limestone.json" />
+                        </Component>
+                        <Component Id="cmp6E246624A3862B357D5FBFE0A155243C" Guid="{35FE124E-CCE6-415F-AFC2-D53328F93C63}">
+                            <File Id="fil3CB84FD5F7C67A29919BAA9E4296E2C6" KeyPath="yes" Source="assets\blocks\grass\grass_marble.json" />
+                        </Component>
+                        <Component Id="cmp8398B42EB64D9CC354FADD7B91EAB5D1" Guid="{7B4365D4-ED90-4A1E-BB2B-D5B96655597E}">
+                            <File Id="filF3C9C16C7A913DF2544607840FE5681E" KeyPath="yes" Source="assets\blocks\grass\grass_ophiolite.json" />
+                        </Component>
+                        <Component Id="cmp460362221D6667F8F99C241A4BBDE826" Guid="{19CC730F-3A61-4658-8DB5-BCE9FE86AB2D}">
+                            <File Id="fil1224AA4235D60585E2926AD10BD89B03" KeyPath="yes" Source="assets\blocks\grass\grass_sandstone.json" />
+                        </Component>
+                        <Component Id="cmpBB6E4742528F65916F4FA1B033402BE1" Guid="{C184F5C4-D525-4922-BD58-6FA27D5076DA}">
+                            <File Id="fil372FB669B3F3EC19190881AA56541522" KeyPath="yes" Source="assets\blocks\grass\grass_schist.json" />
+                        </Component>
+                        <Component Id="cmp094CD57FB05312AAB0BE4AC66D5385BE" Guid="{204D50B0-5906-42DB-90F9-66E9216515FF}">
+                            <File Id="fil9D1C5647724580DC531D810FDCCCD96F" KeyPath="yes" Source="assets\blocks\grass\grass_slate.json" />
+                        </Component>
+                    </Directory>
+                    <Directory Id="dir6476342DCF39AD1A4D32BD4DD7C4C8EF" Name="rocks">
+                        <Component Id="cmp46A20B9138A09C456017E3C23EBBE937" Guid="{96DD8D48-928C-4BD8-AC10-573D85D43D91}">
+                            <File Id="filBC63AEB5B340F7D764B5C2F76FE4C382" KeyPath="yes" Source="assets\blocks\rocks\andesite.json" />
+                        </Component>
+                        <Component Id="cmp8F45316C1007B14F6E052CFE74914E69" Guid="{71ABE748-F161-4F60-B3A2-BD1B9A3B83E2}">
+                            <File Id="filB1826854AE3DA5CD2D2C740096F4D423" KeyPath="yes" Source="assets\blocks\rocks\basalt.json" />
+                        </Component>
+                        <Component Id="cmpBDA6BDD4BF2B7A05CC05AED04F3D44D1" Guid="{0798DF88-D54C-4CD5-9F3E-C2BA149DCFB4}">
+                            <File Id="fil72FE5F41B256FB6D5D4EA2FB770C325D" KeyPath="yes" Source="assets\blocks\rocks\deep_granite.json" />
+                        </Component>
+                        <Component Id="cmp80AED5E510D2448D7A1EE23291E58363" Guid="{54B34BE7-1A34-4D8B-936E-A694023DD26B}">
+                            <File Id="filA663FAA5908250F508F8E933F0EF890E" KeyPath="yes" Source="assets\blocks\rocks\gneiss.json" />
+                        </Component>
+                        <Component Id="cmp28D8D0DC500BD7479904D5A08E2DC25C" Guid="{5318C083-347A-4879-ABB9-52C18FB382A9}">
+                            <File Id="filA548326757FC43F7ACEDB356C46228C3" KeyPath="yes" Source="assets\blocks\rocks\granite.json" />
+                        </Component>
+                        <Component Id="cmp7A82032F7BDC930F95CCEB3C135333DE" Guid="{40FAFCFD-3CB0-486D-B022-52252E891358}">
+                            <File Id="fil8B86EB15A0A1D65D5A7A271C75576DE2" KeyPath="yes" Source="assets\blocks\rocks\kimberlite.json" />
+                        </Component>
+                        <Component Id="cmpB02C9AD7152BB1B9B9FB4C4F94DC594A" Guid="{30E29FDD-6C9F-40F3-8A30-BECE5DF45B85}">
+                            <File Id="filF6B476F1CA3E3CC0E365A8631536E587" KeyPath="yes" Source="assets\blocks\rocks\lherzolite.json" />
+                        </Component>
+                        <Component Id="cmpF52719D41E820849957DCDD3B8912C4B" Guid="{4BCE2853-C021-4B38-820E-BFD1B403FB28}">
+                            <File Id="fil7286595DC6A087EFE601FCD5EC0C1DB8" KeyPath="yes" Source="assets\blocks\rocks\limestone.json" />
+                        </Component>
+                        <Component Id="cmpE949DC582569FBE96752C5AEF06B3ECF" Guid="{39DBCD5C-274F-4690-A762-8629492FB76F}">
+                            <File Id="fil4401FCD6DD16DD64E2221B8A53D844EA" KeyPath="yes" Source="assets\blocks\rocks\marble.json" />
+                        </Component>
+                        <Component Id="cmp6852F8461A8275014104F17C995DEB4A" Guid="{F8BF5D6B-550D-40A8-9007-E4B94301076D}">
+                            <File Id="fil760E635DD8919BDD726A2E60882B1660" KeyPath="yes" Source="assets\blocks\rocks\ophiolite.json" />
+                        </Component>
+                        <Component Id="cmpAA2878BAA439D6AF4BB0A05D41C698ED" Guid="{6AE61738-99C3-4215-A558-50CA21DF6B16}">
+                            <File Id="filF3579B22D7146A7A0782DE31CD86FDBC" KeyPath="yes" Source="assets\blocks\rocks\sandstone.json" />
+                        </Component>
+                        <Component Id="cmpF1393D81A0694DBA2D03F0F8337EC3FB" Guid="{A776C289-3CD9-4335-B823-6711A991ED7F}">
+                            <File Id="fil36F2DE458979B92DD187FC323991D257" KeyPath="yes" Source="assets\blocks\rocks\schist.json" />
+                        </Component>
+                        <Component Id="cmpB170415061961FB1DEFEFFB38B9BCC2E" Guid="{E9D5680C-1A0E-4990-B91F-C088301E89FC}">
+                            <File Id="filBA77415579C894329B1AB172F75C22F2" KeyPath="yes" Source="assets\blocks\rocks\slate.json" />
+                        </Component>
+                    </Directory>
+                    <Directory Id="dirE780E2AC34A14D210F4ACA18D8C741DE" Name="wood">
+                        <Component Id="cmpA652CB1B1E6B41517843E999E72F3FFB" Guid="{2A7BC813-319C-4CAB-9F00-ECCC63D95A6F}">
+                            <File Id="filDD7BD5F3BEC2A12448278A15989F335D" KeyPath="yes" Source="assets\blocks\wood\oak_leaves.json" />
+                        </Component>
+                        <Component Id="cmpC5BF54CEC9A8C1327ED6582A2B5A5686" Guid="{2B5ECA9B-DDED-4EA4-9889-034743A24D03}">
+                            <File Id="filCCED277693E9E6F4576202F95DA0E73F" KeyPath="yes" Source="assets\blocks\wood\oak_log.json" />
+                        </Component>
+                    </Directory>
+                </Directory>
+                <Directory Id="dir9638E5BB783C60896A55F22548157A72" Name="entities">
+                    <Component Id="cmpE000CDB9CDCDD93DD85B141FFF4A0BE1" Guid="{7FE7E1B3-5405-4879-896B-788630A9B5E2}">
+                        <File Id="fil8FD64C75D16AF08CAE1FFD20B7E3B24A" KeyPath="yes" Source="assets\entities\entity_registry.json" />
+                    </Component>
+                    <Component Id="cmpCB35FC77F73E24E8EB48E60B0AC25CF9" Guid="{6D8EE535-B30D-4CB9-82B1-4B6F1ED9ED3D}">
+                        <File Id="fil57331E476C7F535D64A7CF379954CA07" KeyPath="yes" Source="assets\entities\player.json" />
+                    </Component>
+                    <Component Id="cmpC207970371480B99EB5288BBF6120689" Guid="{77701782-3E52-4C08-9303-67A6CC465A5D}">
+                        <File Id="filAA20DDE7C614A8121FAD4EE6DBA9B964" KeyPath="yes" Source="assets\entities\sheep.json" />
+                    </Component>
+                </Directory>
+                <Directory Id="dir81F9A5931900D101E7AD5ABBB2CC78F2" Name="models">
+                    <Directory Id="dirB49FBC0E367F6A8162579430E4A4B82B" Name="blocks">
+                        <Component Id="cmpEC5C80B2A5ECF094DC3B6E415A62A187" Guid="{7C807050-FBA0-45C0-9E33-79FADB8D1ECB}">
+                            <File Id="filB9B15709894ADFC821DF0C2866C51091" KeyPath="yes" Source="assets\models\blocks\redstone_furnace_je.json" />
+                        </Component>
+                        <Component Id="cmp618DB4C0070E1B3F0DC81390CA6D6B67" Guid="{761F3EA2-CCF9-466D-B504-3F4B982CA83E}">
+                            <File Id="fil95261B3E57E0C92DA05D07B61A2ED946" KeyPath="yes" Source="assets\models\blocks\test_model_be.json" />
+                        </Component>
+                    </Directory>
+                    <Directory Id="dir3906BDF690AE2FF70497108DDC1AB7DF" Name="entity">
+                        <Component Id="cmpA36F3D80268D2976D623C932581D8703" Guid="{8E19DCFA-B793-4882-BD53-061EF66A8CFE}">
+                            <File Id="filDC34BB75E7661DC4A30EE0320DCF7889" KeyPath="yes" Source="assets\models\entity\sheep_model.json" />
+                        </Component>
+                    </Directory>
+                </Directory>
+                <Directory Id="dir421FE4B09D97AF055E19D9850C1D1849" Name="textures">
+                    <Directory Id="dir84B4FFE343F63D06D3B4ED8049C2386F" Name="entity">
+                        <Directory Id="dir11E4EA2564A1348C02FE9F71D13DB31D" Name="player">
+                            <Component Id="cmpDCEBA2D5D89269853DAD5E2971A53702" Guid="{E83236BF-877B-4574-A676-ACD8E82ED44E}">
+                                <File Id="filA995995CF919233BD985BAAE8FC52B97" KeyPath="yes" Source="assets\textures\entity\player\player_skin.png" />
+                            </Component>
+                            <Component Id="cmp2CFFF0726B96D8621F36F0B374F3DA69" Guid="{AAFDA0FD-BF91-4173-B390-D4D0A4139F81}">
+                                <File Id="filDB22F40165D1E7C86BAC836268721F40" KeyPath="yes" Source="assets\textures\entity\player\player_skin22.png" />
+                            </Component>
+                        </Directory>
+                        <Directory Id="dir1A922EA8B36DEAB07EBB2E21971D8518" Name="sheep">
+                            <Component Id="cmpEC3B75111CD5EA99F602354E66B387EB" Guid="{198531CE-2466-4E65-9F4B-456415BF554A}">
+                                <File Id="fil305E4D2E85846144F67150CFC29C1584" KeyPath="yes" Source="assets\textures\entity\sheep\sheep.png" />
+                            </Component>
+                        </Directory>
+                    </Directory>
+                    <Directory Id="dirD1EDC8CDFEF42FAFADF6748AE8F40BC5" Name="modelblocks">
+                        <Component Id="cmpA1478F126F8F96865B74841EAACB4EE7" Guid="{BB4EBD0B-DDAE-451F-93D0-D0E1EB3875C7}">
+                            <File Id="filC7DC5F6A559B7902F5B977EFA95ED5EA" KeyPath="yes" Source="assets\textures\modelblocks\aluminum.png" />
+                        </Component>
+                        <Component Id="cmp09F7664C99807B8AAB17DDB9BD23DF85" Guid="{631B5F2A-5ADE-41EC-A088-69E0CC1D3C91}">
+                            <File Id="fil6E86D71C4262FB1E5407F5C5993A665E" KeyPath="yes" Source="assets\textures\modelblocks\blue_metal.png" />
+                        </Component>
+                        <Component Id="cmpF6B124F0CB1E9461B69D3624C5574B7E" Guid="{4FEF4A0A-E7F0-415E-8C6C-9CE11708F59D}">
+                            <File Id="fil0CA37BFD34C2268A5136318630095739" KeyPath="yes" Source="assets\textures\modelblocks\ddsmooth_stone2.png" />
+                        </Component>
+                        <Component Id="cmpF5EDDD0EB9B8D3C864B197C926ED8106" Guid="{9E6ECE24-DFEC-4A99-9AB4-4C3CBC523F01}">
+                            <File Id="filB1D7BE7BFBA1E3E6E17FA27EE5B7CAD2" KeyPath="yes" Source="assets\textures\modelblocks\d_aluminum.png" />
+                        </Component>
+                        <Component Id="cmp90DDB06C68BA52BB8F86A5779BC2812D" Guid="{4C988711-A7F9-4672-95F8-CF4245238766}">
+                            <File Id="filD3724BAC31F7A7E096C67B045FC8E3A6" KeyPath="yes" Source="assets\textures\modelblocks\d_red_metal.png" />
+                        </Component>
+                        <Component Id="cmpB702DC6B1EDB97C44CEDE059FDFB0E1F" Guid="{5720BFE2-4375-41C9-B07C-507AB81094D9}">
+                            <File Id="filACB530E379A30FA99320C9F13A4D5837" KeyPath="yes" Source="assets\textures\modelblocks\test_model_be.png" />
+                        </Component>
+                    </Directory>
+                    <Directory Id="dirF01E80356225434F8419F00BEB57CE51" Name="simpleblocks">
+                        <Component Id="cmp31C6473A2739E846E5251542782D93C2" Guid="{CC6E0E4E-C991-4DE0-BA47-047E87651064}">
+                            <File Id="filE739CA0E8AA0CBE2D730519DB611A87C" KeyPath="yes" Source="assets\textures\simpleblocks\diamond_block.png" />
+                        </Component>
+                        <Component Id="cmpB897422B5439A4C9C863A4BD930803D3" Guid="{A87E97B0-308F-4FB5-AE87-195754356CDA}">
+                            <File Id="fil080D57D41027E956914E8273EDC1A680" KeyPath="yes" Source="assets\textures\simpleblocks\dirt.png" />
+                        </Component>
+                        <Component Id="cmpD9686DDC4037ED8CC37AF54C73BD0C33" Guid="{1AD9CA46-2493-4E8B-A8ED-DA8EA95B98F4}">
+                            <File Id="fil355D5185681738B69CF9AEEB0FBCF1E1" KeyPath="yes" Source="assets\textures\simpleblocks\glowstone.png" />
+                        </Component>
+                        <Component Id="cmp43A2413AB45FFE9079FAE245BA3CE646" Guid="{608CA741-A6AE-47D2-9202-F4DE6CAD01D2}">
+                            <File Id="fil72275AD26161EF3F0D49D9EE58567F4F" KeyPath="yes" Source="assets\textures\simpleblocks\grass_side.png" />
+                        </Component>
+                        <Component Id="cmp981C8C2DEFF4FC1DC9275FA50C7AC27C" Guid="{ECE13F70-0004-4B7E-9D43-5DA61FA41868}">
+                            <File Id="fil8682748118587127720E5F97B268C444" KeyPath="yes" Source="assets\textures\simpleblocks\grass_top.png" />
+                        </Component>
+                        <Component Id="cmpBBA634DD371DBFC291A64593E170AA4C" Guid="{B5BDDD7B-6B36-4C5B-9C1B-C26C6477B347}">
+                            <File Id="filA2BFAABA0751BF50278D4884BD54C168" KeyPath="yes" Source="assets\textures\simpleblocks\planks.png" />
+                        </Component>
+                        <Component Id="cmp8DA9C63EDB0D25BC1EB0AC7B1F618114" Guid="{169BE980-5678-4DE7-AE01-9D236E9216C4}">
+                            <File Id="filC9974F2B3DA58547DA374309D989BF08" KeyPath="yes" Source="assets\textures\simpleblocks\stone.png" />
+                        </Component>
+                        <Directory Id="dirCD7987B5CF9BC67ABF9EF25F02602862" Name="clay">
+                            <Component Id="cmp5F5F374402D4F964029ACFE58D9B47E0" Guid="{A846713D-F76B-47A6-A763-88379C6B026A}">
+                                <File Id="filAE40633A560DD80645713D43F1DFE135" KeyPath="yes" Source="assets\textures\simpleblocks\clay\clay_andesite.png" />
+                            </Component>
+                            <Component Id="cmp8A0428A70859287859C3BB1F903C3F1E" Guid="{B8238C02-557A-49F6-9922-52D720A787D0}">
+                                <File Id="fil743DFCB145E8C693812F12422ADB0A24" KeyPath="yes" Source="assets\textures\simpleblocks\clay\clay_basalt.png" />
+                            </Component>
+                            <Component Id="cmp730C3CF4FE903231E8CA5962A3EF9C13" Guid="{62EBC25A-E94B-4B5C-9399-C9C9F46B90CA}">
+                                <File Id="fil0E96B60FAD1234DC3F2771432FEEBA63" KeyPath="yes" Source="assets\textures\simpleblocks\clay\clay_gneiss.png" />
+                            </Component>
+                            <Component Id="cmp5C54B79FE9B801CB3C439F12EE81D939" Guid="{FA6B2E84-412A-4602-AAF9-B380FD2CB84E}">
+                                <File Id="fil0DBBB598712D63FFE5214F014F59FA8D" KeyPath="yes" Source="assets\textures\simpleblocks\clay\clay_granite.png" />
+                            </Component>
+                            <Component Id="cmp38355EB62CB9E4D3D5BEC2458BB2608A" Guid="{09A329C8-4781-4A69-BAD8-639B56EBADD2}">
+                                <File Id="filA97E227E1CF095CF0E12A724B0A76F97" KeyPath="yes" Source="assets\textures\simpleblocks\clay\clay_kimberlite.png" />
+                            </Component>
+                            <Component Id="cmp2EC1B3BA14060CBCD47E4B560B3CC82F" Guid="{03D8B662-6BD8-4813-A5E7-49E598AA8CB3}">
+                                <File Id="fil19D1FE7187FA5E10FDC36ADA60DB351B" KeyPath="yes" Source="assets\textures\simpleblocks\clay\clay_lherzolite.png" />
+                            </Component>
+                            <Component Id="cmp794A71535834C44DBF88FF7F53FE4C81" Guid="{72DAFA4F-42D8-41C6-B0F5-3742A4ED80B6}">
+                                <File Id="fil69021D2CAC03141A7FBAE281BCF47F92" KeyPath="yes" Source="assets\textures\simpleblocks\clay\clay_limestone.png" />
+                            </Component>
+                            <Component Id="cmp5D929AA7B5DACF0B1921211C0E50FEE2" Guid="{55B16C8D-1323-4B69-A561-11F4AAC138E7}">
+                                <File Id="filE4C4C533F8AB65EB6B5F60396B47994A" KeyPath="yes" Source="assets\textures\simpleblocks\clay\clay_marble.png" />
+                            </Component>
+                            <Component Id="cmpCB35A65B443A02670935866600933C23" Guid="{4628ABC2-538B-4C37-9C3C-E002F3F191AE}">
+                                <File Id="filEFC493F392D931C8C9577EA5DDD84366" KeyPath="yes" Source="assets\textures\simpleblocks\clay\clay_ophiolite.png" />
+                            </Component>
+                            <Component Id="cmp7F8B3FDF2F385C9E857D4868DBA0ABA3" Guid="{93C0EE34-7562-4A3E-9E36-E87BF90792C6}">
+                                <File Id="fil38BA5882F9E8B3AAE9102ECE01843002" KeyPath="yes" Source="assets\textures\simpleblocks\clay\clay_sandstone.png" />
+                            </Component>
+                            <Component Id="cmpBA39E95974B39D502C588B38EB7A7453" Guid="{6FDB675E-D51C-4C64-838D-110711538D15}">
+                                <File Id="fil96222069B4FE8DB42E26CA745B613567" KeyPath="yes" Source="assets\textures\simpleblocks\clay\clay_schist.png" />
+                            </Component>
+                            <Component Id="cmpF4EC34734ED6D2E1842258D2DD5B8AAE" Guid="{2DA821C1-2C9D-425F-B246-690AB32F3111}">
+                                <File Id="fil7716525EA3EAD79DFE273D7ABD4F4867" KeyPath="yes" Source="assets\textures\simpleblocks\clay\clay_slate.png" />
+                            </Component>
+                        </Directory>
+                        <Directory Id="dir5116758905D3D668FE7A38D309198B36" Name="claystone">
+                            <Component Id="cmpB763D23DF16CD2156D6ACB2105681F85" Guid="{73805FEA-4A24-4699-BCE4-DF80AE0C1BAE}">
+                                <File Id="filEFA56E508D300ACBDEDA59E46562641F" KeyPath="yes" Source="assets\textures\simpleblocks\claystone\claystone_andesite.png" />
+                            </Component>
+                            <Component Id="cmpC524181985AA25A2D0AACCDD4DB1B00E" Guid="{EEA225D7-1092-435D-8F92-2124B7FE296C}">
+                                <File Id="fil938EB0517DE47820313D77C6D441E636" KeyPath="yes" Source="assets\textures\simpleblocks\claystone\claystone_basalt.png" />
+                            </Component>
+                            <Component Id="cmpBC635299D5F5846FA57F85B4F88F92C7" Guid="{987B46F0-C468-4E81-90BA-CBFEBD5E3B48}">
+                                <File Id="fil279FBF4C47E1A6DFA2A24AE3389F3306" KeyPath="yes" Source="assets\textures\simpleblocks\claystone\claystone_gneiss.png" />
+                            </Component>
+                            <Component Id="cmpAE82B6271EB5D19CA3B5AD5B91016EF4" Guid="{6D9BD51D-E2DC-4950-844D-E5649A6AF11E}">
+                                <File Id="fil02816D9483D1AA872C4FE843096F7D9F" KeyPath="yes" Source="assets\textures\simpleblocks\claystone\claystone_granite.png" />
+                            </Component>
+                            <Component Id="cmp7E126E1454C10B23C84BC94602AC70ED" Guid="{49D28171-4650-4FA2-BB12-715270C18537}">
+                                <File Id="filA4495FDFA77A49EA3A93EAD71765829A" KeyPath="yes" Source="assets\textures\simpleblocks\claystone\claystone_kimberlite.png" />
+                            </Component>
+                            <Component Id="cmp1F78380C88BC6304C92B771ACF55E5C0" Guid="{D2E8FEA2-FECE-40D7-B4A6-07E1E7FE914D}">
+                                <File Id="filB1E95B4D51E2BF4ED3086878059FA715" KeyPath="yes" Source="assets\textures\simpleblocks\claystone\claystone_lherzolite.png" />
+                            </Component>
+                            <Component Id="cmpAAAB6000AD1D91E07C3D2E8FA5DD636B" Guid="{8056B03F-9C80-462F-A5C2-6FF718533B37}">
+                                <File Id="filBDE84B7E36FFD075034A21DAC6CB0055" KeyPath="yes" Source="assets\textures\simpleblocks\claystone\claystone_limestone.png" />
+                            </Component>
+                            <Component Id="cmpD2624905FDF34C95B0128922C964B2CA" Guid="{3A3843BE-7D1E-423E-8356-5D5631BFF61E}">
+                                <File Id="fil604FD100BB99AEA37EF4837A91DB30EF" KeyPath="yes" Source="assets\textures\simpleblocks\claystone\claystone_marble.png" />
+                            </Component>
+                            <Component Id="cmp577359CB5EE9C499292E307848BD64A4" Guid="{FE6E1D42-F6C9-4DF8-840D-A7E6379DA893}">
+                                <File Id="fil3A00D627E98ECEDC9A12CED5377BEEE5" KeyPath="yes" Source="assets\textures\simpleblocks\claystone\claystone_ophiolite.png" />
+                            </Component>
+                            <Component Id="cmp63CAD97DD7C08B19A20F0710890B3EC5" Guid="{E02DF680-5122-4D78-9AAC-EB28FA94D75B}">
+                                <File Id="fil25A75FC21F1D0708695C95CF0CDA2854" KeyPath="yes" Source="assets\textures\simpleblocks\claystone\claystone_sandstone.png" />
+                            </Component>
+                            <Component Id="cmp37F7E066BC7942B895E0D26AA3F46B4B" Guid="{08AA9617-4D74-43DA-BA5C-A0792A6FE945}">
+                                <File Id="fil89F87C45907D63842893AF13BF1B109C" KeyPath="yes" Source="assets\textures\simpleblocks\claystone\claystone_schist.png" />
+                            </Component>
+                            <Component Id="cmpE48A7710188A303FD1BD070AD0561ED3" Guid="{DC3200DD-8EA1-44EA-86F9-0BDE4A60A82F}">
+                                <File Id="fil6A423D04D3C3ED3C1BC4AD8179E0AF31" KeyPath="yes" Source="assets\textures\simpleblocks\claystone\claystone_slate.png" />
+                            </Component>
+                        </Directory>
+                        <Directory Id="dir3AA932B2D21D8F1963AA9D613FD7C2C0" Name="common">
+                            <Component Id="cmp5FE4DDD232073A09B5B3F79E49E6E7F0" Guid="{8BB2572D-1939-4088-B3A9-5693CED7F6F6}">
+                                <File Id="filF8FD4A82BAF2F0E6F2C83F5494AF3678" KeyPath="yes" Source="assets\textures\simpleblocks\common\grass.png" />
+                            </Component>
+                            <Component Id="cmp4FC84542E42F59D242C66D44536C2D84" Guid="{AEC3F3F4-43F7-46A2-8298-AF05D60ABDFB}">
+                                <File Id="fil6EAC79CC44A286FF03809A5A3373F2C8" KeyPath="yes" Source="assets\textures\simpleblocks\common\grass_side.png" />
+                            </Component>
+                            <Component Id="cmp9F9431336550A5ACA2F569724671E211" Guid="{C6ADC0F7-2139-43FC-B098-688229EF9702}">
+                                <File Id="fil142F3BD0496C73F448F0CDE06ABBB578" KeyPath="yes" Source="assets\textures\simpleblocks\common\gravel.png" />
+                            </Component>
+                            <Component Id="cmpB9B5CA14AB2E9CC61FD6B2B53DF25BFB" Guid="{E015F4F9-C2B1-41DB-B6C0-FEB6FE0D7A93}">
+                                <File Id="fil583EA240954FE17B80021A5FD04A988C" KeyPath="yes" Source="assets\textures\simpleblocks\common\ice.png" />
+                            </Component>
+                            <Component Id="cmp818CC41AFD80B7C667E0ECE247F674F2" Guid="{EEEF5D4B-B642-40D9-8AA1-157BC0824AC9}">
+                                <File Id="fil3125E981585B60CC5C5895117649A3B7" KeyPath="yes" Source="assets\textures\simpleblocks\common\sand.png" />
+                            </Component>
+                            <Component Id="cmp49DDF839AB1D009C059DADE13F140D15" Guid="{40DFABAD-887C-49C8-9FB3-408AE51AF045}">
+                                <File Id="filB5AB68349D4490172446B153DB89A59C" KeyPath="yes" Source="assets\textures\simpleblocks\common\snow.png" />
+                            </Component>
+                            <Component Id="cmp3E42C47FC68E00175B5CD4516D8CBA25" Guid="{1EE21D1F-E82D-4CB8-B31A-7EEF6CD82512}">
+                                <File Id="filFB7F29B85CB0CD9B6EFAE9C1152C9DED" KeyPath="yes" Source="assets\textures\simpleblocks\common\water.png" />
+                            </Component>
+                            <Component Id="cmpF1A7214AE95486A2C00F9F26678B99D3" Guid="{0843E60D-2EFB-4C36-A998-0EAA86F42CA3}">
+                                <File Id="fil821B21FD839ED5046CC4B155235EA268" KeyPath="yes" Source="assets\textures\simpleblocks\common\water_anim.png" />
+                            </Component>
+                            <Component Id="cmpAE3057F1D8CEDD6142D711E88CD72994" Guid="{D2B692CB-CA44-4E3F-9C6C-1C40EAAFEA0B}">
+                                <File Id="filF2F2E00F05C39302B7BBF3701F6BD199" KeyPath="yes" Source="assets\textures\simpleblocks\common\water_flow_anim.png" />
+                            </Component>
+                        </Directory>
+                        <Directory Id="dirC92C1356BC60BC196833EF17CFC7E92A" Name="dirt">
+                            <Component Id="cmpDC042CEB150FFD5EF3FCFAD36E1657BC" Guid="{DC827F25-FC85-4F58-B36A-12446FA7BE18}">
+                                <File Id="filF8392D8F46B9E7B3D996A0F153714108" KeyPath="yes" Source="assets\textures\simpleblocks\dirt\dirt_andesite.png" />
+                            </Component>
+                            <Component Id="cmpBF158DDE4C0555EBEA452CD5BDA6DE7B" Guid="{D807C3A4-C027-4B72-9BE9-7FEF60FDB3B2}">
+                                <File Id="fil231D5EF1762B5010311FA4560DD744EC" KeyPath="yes" Source="assets\textures\simpleblocks\dirt\dirt_basalt.png" />
+                            </Component>
+                            <Component Id="cmp3459329F28FBC69C04B064632A0D208A" Guid="{3D880C1E-1098-4FE1-A173-E8A935A93D8E}">
+                                <File Id="filB15AFF7390BB00DB3E47AD451E00FC48" KeyPath="yes" Source="assets\textures\simpleblocks\dirt\dirt_gneiss.png" />
+                            </Component>
+                            <Component Id="cmpE9A1DCF1AB6A95D4E1678C9DB5E39C4D" Guid="{775277EA-AE77-410A-A81A-25467D3E451E}">
+                                <File Id="fil4BD66D1F85AFDC0620BAF5FF3CC3D9A4" KeyPath="yes" Source="assets\textures\simpleblocks\dirt\dirt_granite.png" />
+                            </Component>
+                            <Component Id="cmpF788A62972FE9EAE46F27E14B26403FD" Guid="{92A3F606-3429-47B6-83F0-7DB2E857B91E}">
+                                <File Id="fil220D0B14F56DBC35194CC3C15899F52D" KeyPath="yes" Source="assets\textures\simpleblocks\dirt\dirt_kimberlite.png" />
+                            </Component>
+                            <Component Id="cmpC248C0A514CF98D5F084A758D047CC26" Guid="{6CBACECA-D365-4C0C-B280-D78C72A0CC79}">
+                                <File Id="filD00317696B1EA02187C8BB4C43591667" KeyPath="yes" Source="assets\textures\simpleblocks\dirt\dirt_lherzolite.png" />
+                            </Component>
+                            <Component Id="cmp6E6DD246CB63DEA89318B2AF01F1AD21" Guid="{B59C0C90-E417-4E69-AEDE-FF4DBACCD63A}">
+                                <File Id="filDF2E6A7E9C2C90C6FB110CD3E9D4ED64" KeyPath="yes" Source="assets\textures\simpleblocks\dirt\dirt_limestone.png" />
+                            </Component>
+                            <Component Id="cmp26C4789416386AD0D679B4116374EA01" Guid="{9BDCB4D0-27EF-4049-A742-DF3E614FD3E9}">
+                                <File Id="fil465B4FE24D0C762D5AAD3EF60C6631AA" KeyPath="yes" Source="assets\textures\simpleblocks\dirt\dirt_marble.png" />
+                            </Component>
+                            <Component Id="cmpBC5A18E326C8F352FBE58429F98B1332" Guid="{F10AAF80-46A8-4F8A-AA45-7A13AD83303C}">
+                                <File Id="fil305038FE95711CCD93132BD1CD950577" KeyPath="yes" Source="assets\textures\simpleblocks\dirt\dirt_ophiolite.png" />
+                            </Component>
+                            <Component Id="cmp12C373B51177F208B1D2C104F415EF7B" Guid="{90C48F84-47B7-4CF1-800C-D4DA6A807785}">
+                                <File Id="fil618F93B48B0FD973A670F3E59FAAF49E" KeyPath="yes" Source="assets\textures\simpleblocks\dirt\dirt_sandstone.png" />
+                            </Component>
+                            <Component Id="cmp495D98058E45FBFA450352B46C387FF6" Guid="{EEF407D3-5C6E-43D3-8390-739076A565C5}">
+                                <File Id="fil4440A085D3A6FDC7E2F4413F2BD2491C" KeyPath="yes" Source="assets\textures\simpleblocks\dirt\dirt_schist.png" />
+                            </Component>
+                            <Component Id="cmp8A8276076BE1A2BD1682E6ED8F842309" Guid="{E0910ED0-B13A-42A7-A6B7-FC2D7127DF92}">
+                                <File Id="fil299C94A5CD6DFC4273FA8C9DF843E15A" KeyPath="yes" Source="assets\textures\simpleblocks\dirt\dirt_slate.png" />
+                            </Component>
+                        </Directory>
+                        <Directory Id="dirE5C53A70D56FB69C6DC124580C84E72A" Name="rocks">
+                            <Component Id="cmp4FB8B6624283CF9762BE3EC7FC19712B" Guid="{7881B883-9B1B-4A4F-9B18-FE898DF24338}">
+                                <File Id="fil45C58D4DDE62C7FD53CA5063F75294E5" KeyPath="yes" Source="assets\textures\simpleblocks\rocks\andesite.png" />
+                            </Component>
+                            <Component Id="cmpB0445A8781591CAB4AF6B5AC49B64E8F" Guid="{BB6300F9-7D0F-4E63-A035-D2ED00822ACB}">
+                                <File Id="fil618040FB35BFDB55FF5FF70961F978EB" KeyPath="yes" Source="assets\textures\simpleblocks\rocks\andesite_transparent.png" />
+                            </Component>
+                            <Component Id="cmp9E412FEEFE84050AF71740217B1A98AD" Guid="{FE0760B6-12C3-4414-A7B0-13B6CA9482DF}">
+                                <File Id="fil9FC08B734A9D14A3972D890ED705E16A" KeyPath="yes" Source="assets\textures\simpleblocks\rocks\basalt.png" />
+                            </Component>
+                            <Component Id="cmp3EE1B5508808E6F0E65219616E4C3D9A" Guid="{6627E341-C98A-49AF-AB1F-272D4608D565}">
+                                <File Id="fil3AC9EDB00DA636319BA2DF5C038F310A" KeyPath="yes" Source="assets\textures\simpleblocks\rocks\deep_granite.png" />
+                            </Component>
+                            <Component Id="cmp9B7E32AE2E9E32F7F23B5E1162E2DFA1" Guid="{83BACCB0-A9A8-41B1-BEB7-1E2622D2B146}">
+                                <File Id="fil9405180E26A1F0163C91BF6FBE82CC50" KeyPath="yes" Source="assets\textures\simpleblocks\rocks\gneiss.png" />
+                            </Component>
+                            <Component Id="cmp5333F06EB8898E693A3CFF2EEA11B558" Guid="{072290DE-1FE4-422C-B8C0-1F7869B880F5}">
+                                <File Id="filF6F37D46996675DAECF3C48CA6B004C3" KeyPath="yes" Source="assets\textures\simpleblocks\rocks\granite.png" />
+                            </Component>
+                            <Component Id="cmpFC8D42D11753FC468EE1B9F3070322CC" Guid="{2B78DFBC-3668-469B-B043-62E3CE98CBEC}">
+                                <File Id="fil0B4BF569820DA71308E03C97E1BAEC48" KeyPath="yes" Source="assets\textures\simpleblocks\rocks\kimberlite.png" />
+                            </Component>
+                            <Component Id="cmpB8FBB3A82B59067787B37A27C50C7532" Guid="{DBD82EE0-571A-4B93-A91D-9AB994D51A1C}">
+                                <File Id="fil6AAAD4294BD8D97A8985D8BD183EE81A" KeyPath="yes" Source="assets\textures\simpleblocks\rocks\lherzolite.png" />
+                            </Component>
+                            <Component Id="cmpB0888DB17879C66B1F1D5C2CB69F8E6B" Guid="{B0F769F2-C0B1-4B02-B3C6-E152782548A8}">
+                                <File Id="filD7BEC28CD8E2685F24366074E8904E0B" KeyPath="yes" Source="assets\textures\simpleblocks\rocks\limestone.png" />
+                            </Component>
+                            <Component Id="cmp732AC951DE27A3C08A250808B7C7DBED" Guid="{876B331D-63C9-4AD8-A9FD-E7ED05460321}">
+                                <File Id="fil58D1B80D9DD68278577FF63C0EC694AF" KeyPath="yes" Source="assets\textures\simpleblocks\rocks\marble.png" />
+                            </Component>
+                            <Component Id="cmpDCE665206EDF8F9AE8FD716D4C9BAD41" Guid="{C6080BA0-3D08-4955-84C9-8087EF421756}">
+                                <File Id="filD4081DE2AB3F88A765E1C02D1784780C" KeyPath="yes" Source="assets\textures\simpleblocks\rocks\ophiolite.png" />
+                            </Component>
+                            <Component Id="cmpC44EDB496B9FC6E6B5D3AE20156AC436" Guid="{F22B3A68-A82B-44EE-9343-382EA2761373}">
+                                <File Id="filEA3E1C2550CE2CC6CB9BE65AFC7F3182" KeyPath="yes" Source="assets\textures\simpleblocks\rocks\sandstone.png" />
+                            </Component>
+                            <Component Id="cmp70617B95290976FE8CCF856BDABAA022" Guid="{6F73A4C6-4163-41A9-ADD8-7D385CD30062}">
+                                <File Id="filBED3FD1C44F882788EA7B73FA3E0EDAC" KeyPath="yes" Source="assets\textures\simpleblocks\rocks\schist.png" />
+                            </Component>
+                            <Component Id="cmp3A9B3DAEBF44EE5DF90569B42BB6B5EB" Guid="{34C2B9E7-A717-4F1C-A7F9-04107D3D62C4}">
+                                <File Id="fil88305ED4BC88A2A5AB388436E73BFC2B" KeyPath="yes" Source="assets\textures\simpleblocks\rocks\slate.png" />
+                            </Component>
+                        </Directory>
+                        <Directory Id="dirD172DE73F5E7B07CB4E86A575DD05656" Name="wood">
+                            <Component Id="cmp29ED3F70D25DC30400E38D02DBAEC983" Guid="{3465B45D-A604-4726-8199-46751036857F}">
+                                <File Id="fil121775B11044A7F34C1FE7146CF8C3DB" KeyPath="yes" Source="assets\textures\simpleblocks\wood\oak_leaves.png" />
+                            </Component>
+                            <Component Id="cmpD053EC691BF948CC35BDE4A13F7C4895" Guid="{2A7E8B61-69EB-40E9-B733-F0DDD8428554}">
+                                <File Id="filDD6AA0A744722BDC127C31D3656C3393" KeyPath="yes" Source="assets\textures\simpleblocks\wood\oak_log.png" />
+                            </Component>
+                            <Component Id="cmpD31B65A13C0DE50D159F7131630E7E91" Guid="{EC897F82-027D-4EDD-8549-477B5CCC4DC3}">
+                                <File Id="fil7AB531EAA8B96C23A57BC9F4B60413DE" KeyPath="yes" Source="assets\textures\simpleblocks\wood\oak_log_top.png" />
+                            </Component>
+                        </Directory>
+                    </Directory>
+                </Directory>
+            </Directory>
+        </DirectoryRef>
+    </Fragment>
+    <Fragment>
+        <ComponentGroup Id="AssetsComponentGroup">
+            <ComponentRef Id="cmpAFAE6A4BE070A22BFB9096EE40A136FF" />
+            <ComponentRef Id="cmpE4141B578D28B96EDABC3907693AE97F" />
+            <ComponentRef Id="cmp1D2F67274769AEC923740380E65F27C5" />
+            <ComponentRef Id="cmpFA13B461AB3496C213A851D8E7930E43" />
+            <ComponentRef Id="cmp2523425BB89A2A3FB8BD97D842EACD19" />
+            <ComponentRef Id="cmpD1C971F2E7A61F640371F56CE598D436" />
+            <ComponentRef Id="cmp99378C9C7889CAB9BE4226C2D58765C7" />
+            <ComponentRef Id="cmp6EC3D6F4FC24B764732977E64F20B461" />
+            <ComponentRef Id="cmp91D1DFB3CB25E3AE9920C04DBAFB3074" />
+            <ComponentRef Id="cmp9E7C0050A466EE73AAC0482940875508" />
+            <ComponentRef Id="cmpB7C7F059E13AEED7963FBAFD5290941C" />
+            <ComponentRef Id="cmpE8960D7C4DEF78A5BE9891BE5BAF0609" />
+            <ComponentRef Id="cmp2604BCDC060AD91634F21A2DF7127A2A" />
+            <ComponentRef Id="cmp1ED3D4B5585F964CBEE7E6E557C5396F" />
+            <ComponentRef Id="cmpBE0F44BF516F6BA7360DC59EF9F8CF00" />
+            <ComponentRef Id="cmp127A4E02E8C939FA067B986F6D2122AA" />
+            <ComponentRef Id="cmp5F6A127AA077454A319FE085CD876977" />
+            <ComponentRef Id="cmpF030A1D964B02276B0D2F1F9D5A24DCE" />
+            <ComponentRef Id="cmpA7ABD15A04744C20750B3C61B0337BBE" />
+            <ComponentRef Id="cmpD5B039A4E0CF59C66DDDA4DA35A41565" />
+            <ComponentRef Id="cmp220017FD5EA8ACB940B7A187189665E0" />
+            <ComponentRef Id="cmp543F690389103CC9910E3E78DAE709D2" />
+            <ComponentRef Id="cmpD3518DFE66B11B08148CF2A14E8A4DF4" />
+            <ComponentRef Id="cmpEB0194B65324114F43EE0D3941234FAB" />
+            <ComponentRef Id="cmp633A920BE93AD9D7326A53CB2B16671E" />
+            <ComponentRef Id="cmp17D1930C3FE1B2F265775F83C59ACD97" />
+            <ComponentRef Id="cmpEA59096B0D91894D22261CB4CBCF8BA8" />
+            <ComponentRef Id="cmp36BB42CB3B5CC11C07064CCE60EA85CF" />
+            <ComponentRef Id="cmp62EE21F20BA6025281ECD9BFD4E3B51A" />
+            <ComponentRef Id="cmp93A092DDACADC86A918A68109B158465" />
+            <ComponentRef Id="cmp2C8D25D5771C92FBEF56DB902305A62D" />
+            <ComponentRef Id="cmpB92F21F3833F51261ADC2D974D216A5C" />
+            <ComponentRef Id="cmp28FB0816ACAE8E8F41DF8603B4A443FE" />
+            <ComponentRef Id="cmp4E66EE2D97A7B1B77700FD834C567560" />
+            <ComponentRef Id="cmp902B88EC700938B69A50D086DE9E1F1D" />
+            <ComponentRef Id="cmp1EDFEB118FBA953C1696D866E5FC7BCA" />
+            <ComponentRef Id="cmp715A5DE7D260136D140EE830E84C700C" />
+            <ComponentRef Id="cmpFAB53E8B1010E7B58D7AAE58740571A2" />
+            <ComponentRef Id="cmp8BF380BB5C202172D023ED265EFBFC2D" />
+            <ComponentRef Id="cmp8D9050E8DCFD83F902622CB26F86D128" />
+            <ComponentRef Id="cmpB4E98365F1B7F1F89F3184D94FDBD2FB" />
+            <ComponentRef Id="cmpAB03B3D71DF740EAEB5C8C174478106A" />
+            <ComponentRef Id="cmp267EF760A590EB176904406F3B19A3DA" />
+            <ComponentRef Id="cmpC386BD987A3AB240F054245AB02BD581" />
+            <ComponentRef Id="cmp67F2C25EBD4D8C35C00E8E281A6FB04B" />
+            <ComponentRef Id="cmp94D5E283B4FE47C19E796BD2DA2AAC79" />
+            <ComponentRef Id="cmpE6A2D73FBD597ED0F68811074BD5B944" />
+            <ComponentRef Id="cmp83D0E76098C5544051675AF825DE24B8" />
+            <ComponentRef Id="cmp4392C32E4707C7EC998EE26345E02F10" />
+            <ComponentRef Id="cmp1B158B11F88B48E81065E6F0495BAFFB" />
+            <ComponentRef Id="cmpA8A5BB34CEF594892A47FEA29BC0A9B2" />
+            <ComponentRef Id="cmp4FC79A12DA51CE205D50534A85B84D62" />
+            <ComponentRef Id="cmp8B3DEAEFBBE19E0BE8C5881DA6953017" />
+            <ComponentRef Id="cmpAED16ED263B3A3F7E664197FEF7C5946" />
+            <ComponentRef Id="cmp34EC2848B27A6520909990CE2C874D20" />
+            <ComponentRef Id="cmp508A6D7B8A6FD6D8E374F09773CB7B6F" />
+            <ComponentRef Id="cmpDA50C5C003117ED5941731B46C5BF2FC" />
+            <ComponentRef Id="cmpE587744CCF4ADB5268781C48AA9B43D6" />
+            <ComponentRef Id="cmpFD0F01ECDEC6954581EB33D3A02703B7" />
+            <ComponentRef Id="cmp5E71DBBB6FD5AE9B6A2AAD8FA442E031" />
+            <ComponentRef Id="cmp795625653DB61C2693F1606BFD7DE518" />
+            <ComponentRef Id="cmp1D5A700B4FD9E72019448ED3688F7AAB" />
+            <ComponentRef Id="cmpCF6EC7B4B8FE7A5DFCC19693F83F29BC" />
+            <ComponentRef Id="cmp7706DBA60F16D0508AE210D246BC312B" />
+            <ComponentRef Id="cmpDE72723DC957D9964FD6135070FE0A21" />
+            <ComponentRef Id="cmp6E246624A3862B357D5FBFE0A155243C" />
+            <ComponentRef Id="cmp8398B42EB64D9CC354FADD7B91EAB5D1" />
+            <ComponentRef Id="cmp460362221D6667F8F99C241A4BBDE826" />
+            <ComponentRef Id="cmpBB6E4742528F65916F4FA1B033402BE1" />
+            <ComponentRef Id="cmp094CD57FB05312AAB0BE4AC66D5385BE" />
+            <ComponentRef Id="cmp46A20B9138A09C456017E3C23EBBE937" />
+            <ComponentRef Id="cmp8F45316C1007B14F6E052CFE74914E69" />
+            <ComponentRef Id="cmpBDA6BDD4BF2B7A05CC05AED04F3D44D1" />
+            <ComponentRef Id="cmp80AED5E510D2448D7A1EE23291E58363" />
+            <ComponentRef Id="cmp28D8D0DC500BD7479904D5A08E2DC25C" />
+            <ComponentRef Id="cmp7A82032F7BDC930F95CCEB3C135333DE" />
+            <ComponentRef Id="cmpB02C9AD7152BB1B9B9FB4C4F94DC594A" />
+            <ComponentRef Id="cmpF52719D41E820849957DCDD3B8912C4B" />
+            <ComponentRef Id="cmpE949DC582569FBE96752C5AEF06B3ECF" />
+            <ComponentRef Id="cmp6852F8461A8275014104F17C995DEB4A" />
+            <ComponentRef Id="cmpAA2878BAA439D6AF4BB0A05D41C698ED" />
+            <ComponentRef Id="cmpF1393D81A0694DBA2D03F0F8337EC3FB" />
+            <ComponentRef Id="cmpB170415061961FB1DEFEFFB38B9BCC2E" />
+            <ComponentRef Id="cmpA652CB1B1E6B41517843E999E72F3FFB" />
+            <ComponentRef Id="cmpC5BF54CEC9A8C1327ED6582A2B5A5686" />
+            <ComponentRef Id="cmpE000CDB9CDCDD93DD85B141FFF4A0BE1" />
+            <ComponentRef Id="cmpCB35FC77F73E24E8EB48E60B0AC25CF9" />
+            <ComponentRef Id="cmpC207970371480B99EB5288BBF6120689" />
+            <ComponentRef Id="cmpEC5C80B2A5ECF094DC3B6E415A62A187" />
+            <ComponentRef Id="cmp618DB4C0070E1B3F0DC81390CA6D6B67" />
+            <ComponentRef Id="cmpA36F3D80268D2976D623C932581D8703" />
+            <ComponentRef Id="cmpDCEBA2D5D89269853DAD5E2971A53702" />
+            <ComponentRef Id="cmp2CFFF0726B96D8621F36F0B374F3DA69" />
+            <ComponentRef Id="cmpEC3B75111CD5EA99F602354E66B387EB" />
+            <ComponentRef Id="cmpA1478F126F8F96865B74841EAACB4EE7" />
+            <ComponentRef Id="cmp09F7664C99807B8AAB17DDB9BD23DF85" />
+            <ComponentRef Id="cmpF6B124F0CB1E9461B69D3624C5574B7E" />
+            <ComponentRef Id="cmpF5EDDD0EB9B8D3C864B197C926ED8106" />
+            <ComponentRef Id="cmp90DDB06C68BA52BB8F86A5779BC2812D" />
+            <ComponentRef Id="cmpB702DC6B1EDB97C44CEDE059FDFB0E1F" />
+            <ComponentRef Id="cmp31C6473A2739E846E5251542782D93C2" />
+            <ComponentRef Id="cmpB897422B5439A4C9C863A4BD930803D3" />
+            <ComponentRef Id="cmpD9686DDC4037ED8CC37AF54C73BD0C33" />
+            <ComponentRef Id="cmp43A2413AB45FFE9079FAE245BA3CE646" />
+            <ComponentRef Id="cmp981C8C2DEFF4FC1DC9275FA50C7AC27C" />
+            <ComponentRef Id="cmpBBA634DD371DBFC291A64593E170AA4C" />
+            <ComponentRef Id="cmp8DA9C63EDB0D25BC1EB0AC7B1F618114" />
+            <ComponentRef Id="cmp5F5F374402D4F964029ACFE58D9B47E0" />
+            <ComponentRef Id="cmp8A0428A70859287859C3BB1F903C3F1E" />
+            <ComponentRef Id="cmp730C3CF4FE903231E8CA5962A3EF9C13" />
+            <ComponentRef Id="cmp5C54B79FE9B801CB3C439F12EE81D939" />
+            <ComponentRef Id="cmp38355EB62CB9E4D3D5BEC2458BB2608A" />
+            <ComponentRef Id="cmp2EC1B3BA14060CBCD47E4B560B3CC82F" />
+            <ComponentRef Id="cmp794A71535834C44DBF88FF7F53FE4C81" />
+            <ComponentRef Id="cmp5D929AA7B5DACF0B1921211C0E50FEE2" />
+            <ComponentRef Id="cmpCB35A65B443A02670935866600933C23" />
+            <ComponentRef Id="cmp7F8B3FDF2F385C9E857D4868DBA0ABA3" />
+            <ComponentRef Id="cmpBA39E95974B39D502C588B38EB7A7453" />
+            <ComponentRef Id="cmpF4EC34734ED6D2E1842258D2DD5B8AAE" />
+            <ComponentRef Id="cmpB763D23DF16CD2156D6ACB2105681F85" />
+            <ComponentRef Id="cmpC524181985AA25A2D0AACCDD4DB1B00E" />
+            <ComponentRef Id="cmpBC635299D5F5846FA57F85B4F88F92C7" />
+            <ComponentRef Id="cmpAE82B6271EB5D19CA3B5AD5B91016EF4" />
+            <ComponentRef Id="cmp7E126E1454C10B23C84BC94602AC70ED" />
+            <ComponentRef Id="cmp1F78380C88BC6304C92B771ACF55E5C0" />
+            <ComponentRef Id="cmpAAAB6000AD1D91E07C3D2E8FA5DD636B" />
+            <ComponentRef Id="cmpD2624905FDF34C95B0128922C964B2CA" />
+            <ComponentRef Id="cmp577359CB5EE9C499292E307848BD64A4" />
+            <ComponentRef Id="cmp63CAD97DD7C08B19A20F0710890B3EC5" />
+            <ComponentRef Id="cmp37F7E066BC7942B895E0D26AA3F46B4B" />
+            <ComponentRef Id="cmpE48A7710188A303FD1BD070AD0561ED3" />
+            <ComponentRef Id="cmp5FE4DDD232073A09B5B3F79E49E6E7F0" />
+            <ComponentRef Id="cmp4FC84542E42F59D242C66D44536C2D84" />
+            <ComponentRef Id="cmp9F9431336550A5ACA2F569724671E211" />
+            <ComponentRef Id="cmpB9B5CA14AB2E9CC61FD6B2B53DF25BFB" />
+            <ComponentRef Id="cmp818CC41AFD80B7C667E0ECE247F674F2" />
+            <ComponentRef Id="cmp49DDF839AB1D009C059DADE13F140D15" />
+            <ComponentRef Id="cmp3E42C47FC68E00175B5CD4516D8CBA25" />
+            <ComponentRef Id="cmpF1A7214AE95486A2C00F9F26678B99D3" />
+            <ComponentRef Id="cmpAE3057F1D8CEDD6142D711E88CD72994" />
+            <ComponentRef Id="cmpDC042CEB150FFD5EF3FCFAD36E1657BC" />
+            <ComponentRef Id="cmpBF158DDE4C0555EBEA452CD5BDA6DE7B" />
+            <ComponentRef Id="cmp3459329F28FBC69C04B064632A0D208A" />
+            <ComponentRef Id="cmpE9A1DCF1AB6A95D4E1678C9DB5E39C4D" />
+            <ComponentRef Id="cmpF788A62972FE9EAE46F27E14B26403FD" />
+            <ComponentRef Id="cmpC248C0A514CF98D5F084A758D047CC26" />
+            <ComponentRef Id="cmp6E6DD246CB63DEA89318B2AF01F1AD21" />
+            <ComponentRef Id="cmp26C4789416386AD0D679B4116374EA01" />
+            <ComponentRef Id="cmpBC5A18E326C8F352FBE58429F98B1332" />
+            <ComponentRef Id="cmp12C373B51177F208B1D2C104F415EF7B" />
+            <ComponentRef Id="cmp495D98058E45FBFA450352B46C387FF6" />
+            <ComponentRef Id="cmp8A8276076BE1A2BD1682E6ED8F842309" />
+            <ComponentRef Id="cmp4FB8B6624283CF9762BE3EC7FC19712B" />
+            <ComponentRef Id="cmpB0445A8781591CAB4AF6B5AC49B64E8F" />
+            <ComponentRef Id="cmp9E412FEEFE84050AF71740217B1A98AD" />
+            <ComponentRef Id="cmp3EE1B5508808E6F0E65219616E4C3D9A" />
+            <ComponentRef Id="cmp9B7E32AE2E9E32F7F23B5E1162E2DFA1" />
+            <ComponentRef Id="cmp5333F06EB8898E693A3CFF2EEA11B558" />
+            <ComponentRef Id="cmpFC8D42D11753FC468EE1B9F3070322CC" />
+            <ComponentRef Id="cmpB8FBB3A82B59067787B37A27C50C7532" />
+            <ComponentRef Id="cmpB0888DB17879C66B1F1D5C2CB69F8E6B" />
+            <ComponentRef Id="cmp732AC951DE27A3C08A250808B7C7DBED" />
+            <ComponentRef Id="cmpDCE665206EDF8F9AE8FD716D4C9BAD41" />
+            <ComponentRef Id="cmpC44EDB496B9FC6E6B5D3AE20156AC436" />
+            <ComponentRef Id="cmp70617B95290976FE8CCF856BDABAA022" />
+            <ComponentRef Id="cmp3A9B3DAEBF44EE5DF90569B42BB6B5EB" />
+            <ComponentRef Id="cmp29ED3F70D25DC30400E38D02DBAEC983" />
+            <ComponentRef Id="cmpD053EC691BF948CC35BDE4A13F7C4895" />
+            <ComponentRef Id="cmpD31B65A13C0DE50D159F7131630E7E91" />
+        </ComponentGroup>
+    </Fragment>
+</Wix>

@@ -2,6 +2,14 @@
 name = "Techpixel"
 version = "0.0.1"
 edition = "2024"
+authors = ["Max A. Vavaev"]
+repository = "https://github.com/MaxLegend/QubePixel"
+
+[package.metadata.wix]
+upgrade-guid = "F33E1A1F-6BC0-4B52-8419-3AA001B9C2CB"
+path-guid = "2711611F-8B16-476A-A2A7-1A81FEB6F19F"
+license = false
+eula = false
 
 [dependencies]
 # Графика и окно
@@ -24,6 +32,7 @@ egui-winit = "0.34"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 bincode = "2.0.1"
+rust-embed = "8.11"
 
 # Системные
 rayon = "1.8"
@@ -34,3 +43,10 @@ bytemuck = { version = "1.21", features = ["derive"] }
 fern = "0.7.1"
 chrono = "0.4.44"
 rfd = "0.15"
+
+# The profile that 'dist' will build with
+[profile.dist]
+inherits = "release"
+lto = "thin"
+
+
