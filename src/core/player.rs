@@ -216,6 +216,8 @@ impl PlayerController {
 
     pub fn is_fly_mode(&self) -> bool { self.fly_mode }
 
+    pub fn body_handle(&self) -> RigidBodyHandle { self.body_handle }
+
     // -----------------------------------------------------------------------
     // Движение и прыжок — вызывать ДО physics.step()
     // -----------------------------------------------------------------------

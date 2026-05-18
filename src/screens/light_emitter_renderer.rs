@@ -235,9 +235,7 @@ impl LightEmitterRenderer {
         pass.set_vertex_buffer(0, vb.slice(..byte_len));
         pass.draw(0..verts.len() as u32, 0..1);
 
-        debug_log!("LightEmitterRenderer", "render",
-            "Drew {} verts for {} emitters",
-            verts.len(), emitters.len());
+
     }
 }
 

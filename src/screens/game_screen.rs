@@ -252,6 +252,10 @@ pub struct GameScreen {
     mouse_dx:      f64,
     mouse_dy:      f64,
     camera_locked: bool,
+    smooth_camera: bool,
+    smooth_vel:    Vec3,
+    smooth_yaw:    f32,
+    smooth_pitch:  f32,
     #[allow(dead_code)]
     mouse_down:    bool,
     keys:          std::collections::HashSet<PhysicalKey>,
@@ -579,6 +583,10 @@ impl GameScreen {
             mouse_dx:      0.0,
             mouse_dy:      0.0,
             camera_locked: false,
+            smooth_camera: false,
+            smooth_vel:    Vec3::ZERO,
+            smooth_yaw:    0.0,
+            smooth_pitch:  0.0,
             mouse_down:    false,
             keys:          std::collections::HashSet::new(),
             target_block:  None,
@@ -785,10 +793,30 @@ impl GameScreen {
         }
     }
 
-    fn process_input(&mut self, _dt: f64) {
-        if self.camera_locked && (self.mouse_dx != 0.0 || self.mouse_dy != 0.0) {
-            self.camera.set_sensitivity(config::mouse_sensitivity());
-            self.camera.rotate(self.mouse_dx, self.mouse_dy);
+    fn process_input(&mut self, dt: f64) {
+        if self.camera_locked {
+            let sens = config::mouse_sensitivity();
+            self.camera.set_sensitivity(sens);
+            if self.player.is_fly_mode() && self.smooth_camera {
+                let target_yaw = self.mouse_dx as f32 * sens;
+                let target_pitch = self.mouse_dy as f32 * sens;
+                let lerp = 1.0 - (-8.0 * dt as f32).exp();
+                self.smooth_yaw   += (target_yaw - self.smooth_yaw) * lerp;
+                self.smooth_pitch += (target_pitch - self.smooth_pitch) * lerp;
+                self.camera.rotate_smooth(self.smooth_yaw, self.smooth_pitch);
+            } else if self.mouse_dx != 0.0 || self.mouse_dy != 0.0 {
+                self.smooth_yaw = 0.0;
+                self.smooth_pitch = 0.0;
+                self.camera.rotate(self.mouse_dx, self.mouse_dy);
+            }
+        } else if self.player.is_fly_mode() && self.smooth_camera {
+            let lerp = 1.0 - (-8.0 * dt as f32).exp();
+            self.smooth_yaw   *= 1.0 - lerp;
+            self.smooth_pitch *= 1.0 - lerp;
+            if self.smooth_yaw.abs() > 1e-6 || self.smooth_pitch.abs() > 1e-6 {
+                self.camera.set_sensitivity(config::mouse_sensitivity());
+                self.camera.rotate_smooth(self.smooth_yaw, self.smooth_pitch);
+            }
         }
         self.mouse_dx = 0.0;
         self.mouse_dy = 0.0;
@@ -842,7 +870,25 @@ impl GameScreen {
         let jump     = self.keys.contains(&PhysicalKey::Code(KeyCode::Space));
         // fly_down uses Shift in fly-mode; in normal mode Shift is used for crouch (handled above)
         let fly_down = self.player.is_fly_mode() && shift_held;
-        self.player.apply_movement(&mut self.physics_world, move_dir, jump, fly_down);
+
+        if self.player.is_fly_mode() && self.smooth_camera {
+            let mut fly_dir = move_dir;
+            if jump     { fly_dir.y += 1.0; }
+            if fly_down { fly_dir.y -= 1.0; }
+            let fly_dir = if fly_dir.length_squared() > 1e-6 {
+                fly_dir.normalize()
+            } else {
+                Vec3::ZERO
+            };
+            let fly_speed = config::fly_speed();
+            let target_vel = fly_dir * fly_speed;
+            let lerp = 1.0 - (-2.0 * dt as f32).exp();
+            self.smooth_vel = self.smooth_vel + (target_vel - self.smooth_vel) * lerp;
+            self.physics_world.set_linvel(self.player.body_handle(), self.smooth_vel);
+        } else {
+            self.smooth_vel = Vec3::ZERO;
+            self.player.apply_movement(&mut self.physics_world, move_dir, jump, fly_down);
+        }
     }
 }
 
@@ -934,14 +980,11 @@ impl Screen for GameScreen {
         // Camera sync
         let eye = self.player.eye_position(&self.physics_world);
         if self.view_mode == ViewMode::ThirdPerson {
-            // Place camera behind & slightly above the player.
             let fwd = self.camera.forward();
             self.camera.position = eye - fwd * 4.5 + Vec3::Y * 0.5;
         } else {
-            // First-person: push camera forward to the front face of the head cube.
-            // Head depth = 8 model units = 0.5 blocks; half = 0.25 blocks, scaled by PLAYER_SIZE.
             let fwd = self.camera.forward();
-            let face_offset = 0.25 * 0.85; // half-depth * PLAYER_SIZE
+            let face_offset = 0.25 * 0.85;
             self.camera.position = eye + Vec3::new(fwd.x, 0.0, fwd.z).normalize_or_zero() * face_offset;
         }
 
@@ -1592,9 +1635,7 @@ impl Screen for GameScreen {
                     }
                 }
 
-                debug_log!("GameScreen", "render",
-                    "Snapshot light scan: {} point, {} spot from block light_sources",
-                    self.block_point_lights.len(), self.block_spot_lights.len());
+
             }
         }
         self.last_vct_upload_us = t_vct_upload.elapsed().as_micros();
@@ -2825,6 +2866,14 @@ impl Screen for GameScreen {
                                 }
                                 KeyCode::F6 => {
                                     self.debug_render.visible = !self.debug_render.visible;
+                                }
+                                KeyCode::KeyP => {
+                                    if self.player.is_fly_mode() {
+                                        self.smooth_camera = !self.smooth_camera;
+                                        self.smooth_vel = Vec3::ZERO;
+                                        debug_log!("GameScreen","on_event",
+                                            "Smooth camera: {}", self.smooth_camera);
+                                    }
                                 }
                                 // G — spawn a test light entity 3 blocks ahead of the player
                                 KeyCode::KeyG => {

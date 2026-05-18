@@ -129,6 +129,12 @@ impl Camera {
             .clamp(-89.0_f32.to_radians(), 89.0_f32.to_radians());
     }
 
+    pub fn rotate_smooth(&mut self, delta_yaw: f32, delta_pitch: f32) {
+        self.yaw  += delta_yaw;
+        self.pitch = (self.pitch - delta_pitch)
+            .clamp(-89.0_f32.to_radians(), 89.0_f32.to_radians());
+    }
+
     pub fn set_sensitivity(&mut self, sens: f32) {
         self.sensitivity = sens;
     }
