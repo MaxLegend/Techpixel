@@ -329,6 +329,8 @@ pub struct GameScreen {
     model_messenger: ModelMessenger,
     // -- Block model renderer (dedicated CCW renderer for blocks with 3D models) --
     block_model_renderer: Option<BlockModelRenderer>,
+    // -- Inventory model renderer (isometric previews for inventory slots) --
+    inventory_model_renderer: Option<crate::screens::inventory_model_renderer::InventoryModelRenderer>,
     /// Cached AABBs (min, max) in model-space for each loaded block model.
     /// Key = model_name (e.g. "block/spotlight").
     /// Used for outline rendering and raycast refinement.
@@ -469,7 +471,8 @@ impl GameScreen {
                             let stack = ItemStack::new(key, name, 64, 64)
                                 .with_color(def.color)
                                 .with_textures(top_tex, side_tex)
-                                .with_tab(def.inventory_tab.clone());
+                                .with_tab(def.inventory_tab.clone())
+                                .with_model(def.model.as_ref().map(|_| format!("block/{}", def.id)));
                             inventory_ui.inventory.hotbar_slots[slot_i] =
                                 crate::screens::inventory::InventorySlot::occupied(stack);
                             slot_i += 1;
@@ -540,7 +543,8 @@ impl GameScreen {
                                 64,
                                 64,
                             ).with_color(def.color).with_textures(top_tex, side_tex)
-                             .with_tab(def.inventory_tab.clone()));
+                             .with_tab(def.inventory_tab.clone())
+                             .with_model(def.model.as_ref().map(|_| format!("block/{}", def.id))));
                         }
                     }
                 }
@@ -634,6 +638,7 @@ impl GameScreen {
             hand_block_renderer: None,
             model_messenger: ModelMessenger::new(),
             block_model_renderer: None,
+            inventory_model_renderer: None,
             model_aabbs: HashMap::new(),
             model_tris:  HashMap::new(),
             view_mode:       ViewMode::FirstPerson,
@@ -1199,6 +1204,12 @@ impl Screen for GameScreen {
             let vct = self.vct_system.as_ref().unwrap();
             self.block_model_renderer = Some(BlockModelRenderer::new(device, format, &vct.frag_bgl));
         }
+        // Lazy-init inventory model renderer
+        if self.inventory_model_renderer.is_none() {
+            self.inventory_model_renderer = Some(
+                crate::screens::inventory_model_renderer::InventoryModelRenderer::new(device, format)
+            );
+        }
 
         // -- Block model loading via ModelMessenger --------------------------
         // On first frame, scan registry for blocks with custom models
@@ -1217,6 +1228,7 @@ impl Screen for GameScreen {
         // Collect (model_name, edge_verts) pairs to register with the 3D pipeline
         // after the bmr borrow ends (avoids borrow conflicts with self.pipeline_3d).
         let mut pending_outlines: Vec<(String, Vec<[f32; 3]>)> = Vec::new();
+        let mut pending_imr: Vec<(String, Vec<crate::core::player_model::PlayerVertex>, Vec<u32>)> = Vec::new();
 
         if let Some(ref mut bmr) = self.block_model_renderer {
             for resp in self.model_messenger.drain_responses() {
@@ -1259,6 +1271,9 @@ impl Screen for GameScreen {
                             .map(|&t| [t[0]+0.5, t[1], t[2]+0.5, t[3]+0.5, t[4], t[5]+0.5, t[6]+0.5, t[7], t[8]+0.5])
                             .collect();
                         self.model_tris.insert(resp.model_name.clone(), tris);
+
+                        // Collect for imr registration after the bmr borrow ends
+                        pending_imr.push((resp.model_name.clone(), model_data.vertices.clone(), model_data.indices.clone()));
 
                         if let Some((tex, view)) = resp.atlas_texture {
                             bmr.register_model(
@@ -1324,6 +1339,17 @@ impl Screen for GameScreen {
             if let Some(ref mut pipeline) = self.pipeline_3d {
                 for (name, edges) in pending_outlines {
                     pipeline.register_model_outline(device, queue, &name, &edges);
+                }
+            }
+        }
+
+        // Register models with the inventory model renderer using shared texture resources.
+        if !pending_imr.is_empty() {
+            if let (Some(bmr), Some(imr)) = (&self.block_model_renderer, &mut self.inventory_model_renderer) {
+                for (name, verts, idxs) in pending_imr {
+                    if let (Some(tv), Some(ss)) = (bmr.model_texture_view(&name), bmr.model_sampler(&name)) {
+                        imr.register_model(device, &name, &verts, &idxs, tv, ss);
+                    }
                 }
             }
         }
@@ -2363,6 +2389,27 @@ impl Screen for GameScreen {
             egui_render_us:    crate::core::frame_timing::egui_render_us(),
             submit_present_us: crate::core::frame_timing::submit_present_us(),
         });
+    }
+
+    fn render_post_ui(
+        &mut self,
+        encoder:          &mut wgpu::CommandEncoder,
+        view:             &wgpu::TextureView,
+        device:           &wgpu::Device,
+        queue:            &wgpu::Queue,
+        _format:          wgpu::TextureFormat,
+        width:            u32,
+        height:           u32,
+        pixels_per_point: f32,
+    ) {
+        let slots = self.inventory_ui.take_model_preview_slots();
+        if slots.is_empty() { return }
+        if let Some(ref mut imr) = self.inventory_model_renderer {
+            imr.render_previews(
+                encoder, view, device, queue,
+                &slots, width, height, pixels_per_point,
+            );
+        }
     }
 
     fn build_ui(&mut self, ctx: &egui::Context) {

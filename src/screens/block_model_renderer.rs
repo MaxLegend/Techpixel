@@ -300,6 +300,16 @@ impl BlockModelRenderer {
         self.models.contains_key(model_id)
     }
 
+    /// Returns the texture atlas view for a registered model.
+    pub fn model_texture_view(&self, model_id: &str) -> Option<&wgpu::TextureView> {
+        self.models.get(model_id).map(|m| &m.skin_view)
+    }
+
+    /// Returns the sampler for a registered model.
+    pub fn model_sampler(&self, model_id: &str) -> Option<&wgpu::Sampler> {
+        self.models.get(model_id).map(|m| &m.skin_samp)
+    }
+
     // -----------------------------------------------------------------------
     // Instance management
     // -----------------------------------------------------------------------

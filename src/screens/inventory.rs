@@ -5,6 +5,7 @@
 use std::collections::HashMap;
 use egui::{Color32, Pos2, Rect, Rounding, Stroke, Vec2, Align2, FontId, Margin};
 
+use crate::screens::inventory_model_renderer::ModelPreviewSlot;
 use crate::{debug_log, ext_debug_log, flow_debug_log};
 
 // =============================================================================
@@ -56,6 +57,9 @@ pub struct ItemStack {
     /// Creative-mode tab this item belongs to (mirrors BlockDefinition.inventory_tab).
     #[serde(default)]
     pub inventory_tab: Option<String>,
+    /// If this block has a custom 3D model, the model ID (e.g. "block/redstone_furnace_je").
+    #[serde(default)]
+    pub model_name: Option<String>,
 }
 
 impl ItemStack {
@@ -66,6 +70,7 @@ impl ItemStack {
             block_id: block_id.into(), display_name: display_name.into(),
             amount, max_stack, block_color: [0.5, 0.5, 0.5],
             top_texture: None, side_texture: None, inventory_tab: None,
+            model_name: None,
         }
     }
 
@@ -79,6 +84,11 @@ impl ItemStack {
 
     pub fn with_tab(mut self, tab: Option<String>) -> Self {
         self.inventory_tab = tab;
+        self
+    }
+
+    pub fn with_model(mut self, model_name: Option<String>) -> Self {
+        self.model_name = model_name;
         self
     }
 
@@ -122,6 +132,7 @@ impl ItemStack {
             top_texture:  self.top_texture.clone(),
             side_texture: self.side_texture.clone(),
             inventory_tab: self.inventory_tab.clone(),
+            model_name:  self.model_name.clone(),
         })
     }
 
@@ -183,6 +194,7 @@ impl InventorySlot {
                     top_texture:  item.top_texture.clone(),
                     side_texture: item.side_texture.clone(),
                     inventory_tab: item.inventory_tab.clone(),
+                    model_name:  item.model_name.clone(),
                 });
                 true
             }
@@ -407,6 +419,8 @@ pub struct InventoryUI {
     available_tabs:       Vec<String>,
     /// Currently selected tab index (0 = "All").
     selected_tab:         usize,
+    /// Model preview slots collected during build_ui for post-egui rendering.
+    model_preview_slots:  Vec<ModelPreviewSlot>,
 }
 
 impl InventoryUI {
@@ -426,6 +440,7 @@ impl InventoryUI {
             tile_textures:        HashMap::new(),
             available_tabs:       vec!["All".to_string()],
             selected_tab:         0,
+            model_preview_slots:  Vec::new(),
         }
     }
 
@@ -488,6 +503,10 @@ impl InventoryUI {
     pub fn hotbar_count(&self)        -> usize { self.inventory.hotbar_count() }
     pub fn hotbar_slot_name(&self, i: usize) -> &str { self.inventory.hotbar_slot_name(i) }
     pub fn render_commands(&self)     -> &[RenderCommand] { &self.last_render_commands }
+
+    pub fn take_model_preview_slots(&mut self) -> Vec<ModelPreviewSlot> {
+        std::mem::take(&mut self.model_preview_slots)
+    }
 
     pub fn use_active_block(&mut self) -> Option<(String, String, bool)> {
         self.inventory.use_active_block()
@@ -636,6 +655,7 @@ impl InventoryUI {
     pub fn build_ui(&mut self, ctx: &egui::Context) -> Vec<RenderCommand> {
         self.last_render_commands.clear();
         self.inventory_interacted = false;
+        self.model_preview_slots.clear();
 
         self.build_hotbar(ctx);
 
@@ -646,6 +666,26 @@ impl InventoryUI {
         self.draw_dragged_item(ctx);
 
         std::mem::take(&mut self.last_render_commands)
+    }
+
+    fn draw_slot_block(
+        &mut self,
+        painter: &egui::Painter,
+        rect: Rect,
+        color: [f32; 3],
+        top_tex: Option<egui::TextureId>,
+        side_tex: Option<egui::TextureId>,
+        model_name: Option<&str>,
+    ) {
+        if let Some(mn) = model_name {
+            self.model_preview_slots.push(ModelPreviewSlot {
+                model_id: mn.to_string(),
+                rect,
+            });
+            draw_block_iso_placeholder(painter, rect, color);
+        } else {
+            draw_block_iso(painter, rect, color, top_tex, side_tex);
+        }
     }
 
     // ----- Hotbar -----------------------------------------------------------
@@ -663,6 +703,7 @@ impl InventoryUI {
             block_id:     String,
             top_texture:  Option<String>,
             side_texture: Option<String>,
+            model_name:   Option<String>,
         }
 
         let active_idx = self.inventory.active_hotbar_index;
@@ -676,6 +717,7 @@ impl InventoryUI {
                     block_id:     it.block_id.clone(),
                     top_texture:  it.top_texture.clone(),
                     side_texture: it.side_texture.clone(),
+                    model_name:   it.model_name.clone(),
                 });
             (is_active, snap)
         }).collect();
@@ -734,7 +776,7 @@ impl InventoryUI {
             if let Some(s) = snap {
                 let top_tex  = s.top_texture.as_ref().and_then(|nm| self.tile_textures.get(nm).map(|h| h.id()));
                 let side_tex = s.side_texture.as_ref().and_then(|nm| self.tile_textures.get(nm).map(|h| h.id()));
-                draw_block_iso(&painter, slot_rect, s.block_color, top_tex, side_tex);
+                self.draw_slot_block(&painter, slot_rect, s.block_color, top_tex, side_tex, s.model_name.as_deref());
 
                 if s.amount > 1 {
                     let pos = slot_rect.right_bottom() + Vec2::new(-3.0, -1.0);
@@ -836,11 +878,12 @@ impl InventoryUI {
                             for row in 0..main_rows {
                                 for col in 0..MAIN_COLS {
                                     let idx = row * MAIN_COLS + col;
-                                    let (bid, amount, color, top_nm, side_nm) =
+                                    let (bid, amount, color, top_nm, side_nm, mn) =
                                         self.inventory.main_slot(idx)
                                             .and_then(|s| s.item())
                                             .map(|i| (i.block_id.clone(), i.amount, i.block_color,
-                                                      i.top_texture.clone(), i.side_texture.clone()))
+                                                      i.top_texture.clone(), i.side_texture.clone(),
+                                                      i.model_name.clone()))
                                             .unwrap_or_default();
 
                                     let resp = ui.add_sized(
@@ -855,7 +898,7 @@ impl InventoryUI {
                                     if !bid.is_empty() {
                                         let top_tex  = top_nm.as_ref().and_then(|n| self.tile_textures.get(n).map(|h| h.id()));
                                         let side_tex = side_nm.as_ref().and_then(|n| self.tile_textures.get(n).map(|h| h.id()));
-                                        draw_block_iso(ui.painter(), resp.rect, color, top_tex, side_tex);
+                                        self.draw_slot_block(ui.painter(), resp.rect, color, top_tex, side_tex, mn.as_deref());
                                         if amount > 1 {
                                             let p   = ui.painter();
                                             let pos = resp.rect.right_bottom() + Vec2::new(-3.0, -2.0);
@@ -918,14 +961,14 @@ impl InventoryUI {
                             .max_col_width(SLOT_SIZE)
                             .show(ui, |ui| {
                                 let mut grid_col = 0usize;
-                                for (idx, item) in self.creative_items.iter().enumerate() {
-                                    let show = show_all_tabs
-                                        || item.inventory_tab.as_deref() == Some(filter_tab_name.as_str());
-                                    if !show { continue; }
-
-                                    let color    = item.block_color;
-                                    let top_nm   = item.top_texture.clone();
-                                    let side_nm  = item.side_texture.clone();
+                                let creative_snap: Vec<(usize, String, [f32;3], Option<String>, Option<String>, Option<String>, u32, Option<String>)> = self.creative_items.iter().enumerate()
+                                    .filter(|(_, item)| show_all_tabs || item.inventory_tab.as_deref() == Some(filter_tab_name.as_str()))
+                                    .map(|(idx, item)| (idx, item.block_id.clone(), item.block_color,
+                                        item.top_texture.clone(), item.side_texture.clone(),
+                                        item.inventory_tab.clone(), item.amount,
+                                        item.model_name.clone()))
+                                    .collect();
+                                for (idx, bid, color, top_nm, side_nm, _tab, amount, model_nm) in &creative_snap {
                                     let resp = ui.add_sized(
                                         [SLOT_SIZE, SLOT_SIZE],
                                         egui::Button::new("").fill(palette::slot_bg())
@@ -933,17 +976,13 @@ impl InventoryUI {
                                     );
                                     let top_tex  = top_nm.as_ref().and_then(|n| self.tile_textures.get(n).map(|h| h.id()));
                                     let side_tex = side_nm.as_ref().and_then(|n| self.tile_textures.get(n).map(|h| h.id()));
-                                    draw_block_iso(ui.painter(), resp.rect, color, top_tex, side_tex);
+                                    self.draw_slot_block(ui.painter(), resp.rect, *color, top_tex, side_tex, model_nm.as_deref());
 
-                                    if resp.clicked()                { pending_clicks.push(PendingClick::Left(SlotTarget::Creative(idx)));  self.inventory_interacted = true; }
-                                    else if resp.secondary_clicked() { pending_clicks.push(PendingClick::Right(SlotTarget::Creative(idx))); self.inventory_interacted = true; }
+                                    if resp.clicked()                { pending_clicks.push(PendingClick::Left(SlotTarget::Creative(*idx)));  self.inventory_interacted = true; }
+                                    else if resp.secondary_clicked() { pending_clicks.push(PendingClick::Right(SlotTarget::Creative(*idx))); self.inventory_interacted = true; }
 
-                                    if resp.hovered() {
-                                        egui::show_tooltip_text(ctx, ui.layer_id(),
-                                            egui::Id::new(("creative_tip", idx)), &item.display_name);
-                                    }
                                     self.last_render_commands.push(RenderCommand {
-                                        rect: resp.rect, block_id: item.block_id.clone(), count: item.amount,
+                                        rect: resp.rect, block_id: bid.clone(), count: *amount,
                                     });
 
                                     grid_col += 1;
@@ -970,6 +1009,7 @@ impl InventoryUI {
                     struct HSnap {
                         bid: String, amount: u32, color: [f32; 3],
                         top_nm: Option<String>, side_nm: Option<String>,
+                        model_nm: Option<String>,
                     }
                     let hsnaps: Vec<HSnap> = (0..hc).map(|i| {
                         self.inventory.hotbar_slot(i).and_then(|s| s.item())
@@ -977,9 +1017,10 @@ impl InventoryUI {
                                 bid: it.block_id.clone(), amount: it.amount,
                                 color: it.block_color,
                                 top_nm: it.top_texture.clone(), side_nm: it.side_texture.clone(),
+                                model_nm: it.model_name.clone(),
                             })
                             .unwrap_or(HSnap { bid: String::new(), amount: 0,
-                                color: [0.0;3], top_nm: None, side_nm: None })
+                                color: [0.0;3], top_nm: None, side_nm: None, model_nm: None })
                     }).collect();
 
                     egui::Grid::new("inv_hotbar_grid")
@@ -1005,7 +1046,7 @@ impl InventoryUI {
                                 if !snap.bid.is_empty() {
                                     let top_tex  = snap.top_nm.as_ref().and_then(|n| self.tile_textures.get(n).map(|h| h.id()));
                                     let side_tex = snap.side_nm.as_ref().and_then(|n| self.tile_textures.get(n).map(|h| h.id()));
-                                    draw_block_iso(ui.painter(), resp.rect, snap.color, top_tex, side_tex);
+                                    self.draw_slot_block(ui.painter(), resp.rect, snap.color, top_tex, side_tex, snap.model_nm.as_deref());
                                     if snap.amount > 1 {
                                         let p   = ui.painter();
                                         let pos = resp.rect.right_bottom() + Vec2::new(-3.0, -2.0);
@@ -1229,4 +1270,16 @@ fn draw_slot_bg(painter: &egui::Painter, rect: Rect, is_active: bool) {
     painter.line_segment([tl, bl], Stroke::new(2.0, shadow));
     painter.line_segment([bl, br], Stroke::new(2.0, highlight));
     painter.line_segment([tr, br], Stroke::new(2.0, highlight));
+}
+
+fn draw_block_iso_placeholder(painter: &egui::Painter, rect: Rect, color: [f32; 3]) {
+    let cx = rect.center().x;
+    let cy = rect.center().y;
+    let sz = rect.height() * 0.35;
+    let c  = to_c32(mul_color(color, 0.3));
+    painter.rect_filled(
+        Rect::from_center_size(Pos2::new(cx, cy), Vec2::splat(sz * 2.0)),
+        Rounding::ZERO,
+        c,
+    );
 }

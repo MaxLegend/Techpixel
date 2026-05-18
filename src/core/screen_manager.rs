@@ -133,6 +133,22 @@ impl ScreenManager {
             entry.screen.build_ui(ctx);
         }
     }
+
+    pub fn render_post_ui(
+        &mut self,
+        encoder:          &mut wgpu::CommandEncoder,
+        view:             &wgpu::TextureView,
+        device:           &wgpu::Device,
+        queue:            &wgpu::Queue,
+        format:           wgpu::TextureFormat,
+        width:            u32,
+        height:           u32,
+        pixels_per_point: f32,
+    ) {
+        if let Some(entry) = self.entries.last_mut() {
+            entry.screen.render_post_ui(encoder, view, device, queue, format, width, height, pixels_per_point);
+        }
+    }
     pub fn on_event(&mut self, event: &WindowEvent) {
         if let Some(entry) = self.entries.last_mut() {
             entry.screen.on_event(event);

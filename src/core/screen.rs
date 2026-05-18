@@ -65,4 +65,17 @@ pub trait Screen {
     fn clear_color(&self) -> wgpu::Color {
         wgpu::Color { r: 0.0, g: 0.0, b: 0.0, a: 1.0 }
     }
+    /// Render on top of the egui overlay (after egui has drawn).
+    /// Used for 3D content that must appear above the UI (e.g. inventory model previews).
+    fn render_post_ui(
+        &mut self,
+        _encoder:          &mut wgpu::CommandEncoder,
+        _view:             &wgpu::TextureView,
+        _device:           &wgpu::Device,
+        _queue:            &wgpu::Queue,
+        _format:           wgpu::TextureFormat,
+        _width:            u32,
+        _height:           u32,
+        _pixels_per_point: f32,
+    ) {}
 }

@@ -287,6 +287,15 @@ fn main() {
                                     t_egui_render.elapsed().as_micros()
                                 );
 
+                                // 3D on top of egui (inventory model previews, etc.)
+                                let ppp = app.egui_manager.ctx().pixels_per_point();
+                                app.screen_manager.render_post_ui(
+                                    &mut encoder, &frame.view,
+                                    app.renderer.device(), app.renderer.queue(),
+                                    app.renderer.surface_format(),
+                                    size.width, size.height, ppp,
+                                );
+
                                 // ── Phase 4: Submit ───────────────────────────────
                                 // GPU starts executing immediately; CPU returns fast.
                                 // Next iteration begins with Phase 1 CPU work while GPU renders.

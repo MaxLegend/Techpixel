@@ -7,6 +7,7 @@ pub mod player_renderer;
 pub mod sheep_renderer;
 pub mod entity_renderer;
 pub mod block_model_renderer;
+pub mod inventory_model_renderer;
 pub mod hand_block_renderer;
 pub mod inventory;
 pub mod main_menu;
