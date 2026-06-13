@@ -17,7 +17,6 @@ pub(crate) mod upload_worker;
 pub mod lighting;
 pub(crate) mod lighting_legacy;
 pub mod vct;
-pub mod water;
 pub mod fluid;
 pub mod player_model;
 pub mod block_model;

@@ -387,6 +387,10 @@ impl GameScreen {
             atlas.layout().uv_map.len()
         );
 
+        // Auto-classify transparency from texture alpha (replaces the JSON `transparent`
+        // flag for render-pass routing). Runs after baking so resolved face keys exist.
+        registry.classify_texture_alpha(|name| atlas.texture_has_alpha(name));
+
         let atlas_layout = atlas.layout().clone();
 
         let mut physics_world = PhysicsWorld::new();
@@ -1241,6 +1245,7 @@ impl Screen for GameScreen {
                                 origin: snap.origin,
                                 size: snap.size,
                                 blocks: snap.blocks.clone(),
+                                dirty_region: None, // model repack → full re-upload
                             });
                         }
                     }
@@ -1397,11 +1402,27 @@ impl Screen for GameScreen {
                 }
             }
 
-            // Remeshed chunks — clear old model spawns and stale transparent meshes.
-            // Transparent meshes that are now empty (no glass blocks remain) would
-            // otherwise persist because an empty result produces no upload job.
+            // Remeshed chunks — drop stale sub-meshes, but ONLY for chunks that produced
+            // no geometry of that kind this pass. A chunk that still has glass keeps its
+            // current glass mesh on screen until the freshly-built one arrives via the
+            // async upload, so editing one glass block no longer blinks every glass block
+            // in the chunk (the eager evict left a multi-frame gap). Same for foliage/slab.
+            // Chunks that became empty of a kind are absent from that result vec → evicted.
             if !result.meshed_chunk_keys.is_empty() {
-                pipeline.evict_transparent_for_keys(&result.meshed_chunk_keys);
+                use std::collections::HashSet;
+                let has_transp:  HashSet<(i32, i32, i32)> = result.transparent_meshes.iter().map(|m| m.0).collect();
+                let has_foliage: HashSet<(i32, i32, i32)> = result.foliage_meshes.iter().map(|m| m.0).collect();
+                let has_slab:    HashSet<(i32, i32, i32)> = result.slab_meshes.iter().map(|m| m.0).collect();
+
+                let only_missing = |present: &HashSet<(i32, i32, i32)>| -> Vec<(i32, i32, i32)> {
+                    result.meshed_chunk_keys.iter().copied()
+                        .filter(|k| !present.contains(k))
+                        .collect()
+                };
+
+                pipeline.evict_transparent_for_keys(&only_missing(&has_transp));
+                pipeline.evict_foliage_for_keys(&only_missing(&has_foliage));
+                pipeline.evict_slab_for_keys(&only_missing(&has_slab));
                 if let Some(ref mut bmr) = self.block_model_renderer {
                     bmr.despawn_in_chunks(&result.meshed_chunk_keys);
                 }
@@ -1456,6 +1477,26 @@ impl Screen for GameScreen {
                     })
                     .collect();
                 self.upload_worker.submit(glass_jobs);
+            }
+            // Foliage meshes (Cross/CropGrid) → foliage upload queue
+            if !result.foliage_meshes.is_empty() {
+                let foliage_jobs: Vec<UploadJob> = result.foliage_meshes
+                    .into_iter()
+                    .map(|(key, vertices, indices, aabb_min, aabb_max)| UploadJob {
+                        key, vertices, indices, aabb_min, aabb_max, kind: MeshKind::Foliage,
+                    })
+                    .collect();
+                self.upload_worker.submit(foliage_jobs);
+            }
+            // Slab meshes → slab upload queue
+            if !result.slab_meshes.is_empty() {
+                let slab_jobs: Vec<UploadJob> = result.slab_meshes
+                    .into_iter()
+                    .map(|(key, vertices, indices, aabb_min, aabb_max)| UploadJob {
+                        key, vertices, indices, aabb_min, aabb_max, kind: MeshKind::Slab,
+                    })
+                    .collect();
+                self.upload_worker.submit(slab_jobs);
             }
         }
 
@@ -1530,6 +1571,20 @@ impl Screen for GameScreen {
                             );
                             self.gpu_evicted_pending.extend(evicted);
                         }
+                        MeshKind::Foliage => {
+                            pipeline.insert_foliage_mesh(
+                                device, r.key, vb, ib, r.index_count,
+                                vb_size + ib_size,
+                                r.aabb_min, r.aabb_max,
+                            );
+                        }
+                        MeshKind::Slab => {
+                            pipeline.insert_slab_mesh(
+                                device, r.key, vb, ib, r.index_count,
+                                vb_size + ib_size,
+                                r.aabb_min, r.aabb_max,
+                            );
+                        }
                     }
                 }
 
@@ -1577,13 +1632,6 @@ impl Screen for GameScreen {
             self.debug_render.vct_origin = snap.origin;
 
             vct.upload_volume(queue, &snap, &self.block_registry_for_vct);
-            
-            // Keep a clone for when late-loading models need to trigger a repack
-            self.last_voxel_snapshot = Some(crate::core::vct::voxel_volume::VoxelSnapshot {
-                origin: snap.origin,
-                size: snap.size,
-                blocks: snap.blocks.clone(),
-            });
 
             // Scan voxel snapshot for blocks with inline light_sources.
             // Builds block_point_lights (PointLightGPU) and block_spot_lights (SpotLightGPU)
@@ -1592,17 +1640,21 @@ impl Screen for GameScreen {
             self.block_spot_lights.clear();
             self.block_point_lights.clear();
 
-            // Pre-build lookup: block_id → &[BlockLightSource] (skips blocks with no sources)
-            let light_source_map: std::collections::HashMap<u8, &[BlockLightSource]> =
-                (1u8..=255u8)
-                    .filter_map(|id| {
-                        let def = self.block_registry_for_vct.get(id)?;
-                        if def.light_sources.is_empty() { None }
-                        else { Some((id, def.light_sources.as_slice())) }
-                    })
-                    .collect();
+            // Pre-build lookup: block_id → &[BlockLightSource].
+            // Plain 256-entry array — the 2M-voxel scan below indexes it directly
+            // instead of hashing every non-air voxel.
+            let mut light_source_lut: [Option<&[BlockLightSource]>; 256] = [None; 256];
+            let mut has_light_sources = false;
+            for id in 1u8..=255 {
+                if let Some(def) = self.block_registry_for_vct.get(id) {
+                    if !def.light_sources.is_empty() {
+                        light_source_lut[id as usize] = Some(def.light_sources.as_slice());
+                        has_light_sources = true;
+                    }
+                }
+            }
 
-            if !light_source_map.is_empty() {
+            if has_light_sources {
                 use crate::core::vct::voxel_volume::{VOLUME_SIZE, vol_idx};
                 let vol_size = VOLUME_SIZE as usize;
                 let origin   = snap.origin;
@@ -1612,8 +1664,8 @@ impl Screen for GameScreen {
                         for x in 0..vol_size {
                             let bid = snap.blocks[vol_idx(x as u32, y as u32, z as u32)];
                             if bid == 0 { continue; }
-                            let sources = match light_source_map.get(&bid) {
-                                Some(s) => *s,
+                            let sources = match light_source_lut[bid as usize] {
+                                Some(s) => s,
                                 None    => continue,
                             };
                             // Block-centre in world space
@@ -1660,9 +1712,11 @@ impl Screen for GameScreen {
                         }
                     }
                 }
-
-
             }
+
+            // Keep the snapshot for when late-loading models need to trigger a repack.
+            // Moved (not cloned) — the GPU upload and light scan above are done with it.
+            self.last_voxel_snapshot = Some(snap);
         }
         self.last_vct_upload_us = t_vct_upload.elapsed().as_micros();
 
@@ -1950,6 +2004,12 @@ impl Screen for GameScreen {
             let t = Instant::now();
             let vct = self.vct_system.as_ref().unwrap();
             pipeline.render_transparent(
+                encoder, view, device, queue, &self.camera,
+                atlas_view, normal_atlas_view, &lighting_data,
+                vct_frag_bg, &vct.frag_bgl,
+            );
+            // Foliage rendered right after glass (same no-cull transparent pipeline).
+            pipeline.render_foliage(
                 encoder, view, device, queue, &self.camera,
                 atlas_view, normal_atlas_view, &lighting_data,
                 vct_frag_bg, &vct.frag_bgl,

@@ -143,6 +143,17 @@ impl TextureAtlas {
 
     pub fn layout(&self) -> &TextureAtlasLayout { &self.layout }
 
+    /// Returns true if the named atlas tile contains any non-opaque texel
+    /// (alpha < 200). Used to auto-route a block to the transparent pass purely
+    /// from its texture (holes or semi-transparency) instead of a JSON flag.
+    /// The 200 threshold ignores near-opaque anti-aliased edges (~250–255).
+    pub fn texture_has_alpha(&self, name: &str) -> bool {
+        match self.tile_rgba(name) {
+            Some(px) => px.chunks_exact(4).any(|p| p[3] < 200),
+            None     => false,
+        }
+    }
+
     /// Extract the 16×16 RGBA tile for `name` from the CPU-side atlas image.
     /// Returns `None` if the texture name is not registered.
     pub fn tile_rgba(&self, name: &str) -> Option<Vec<u8>> {

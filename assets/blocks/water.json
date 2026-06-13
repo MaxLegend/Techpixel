@@ -23,9 +23,9 @@
   "is_water": true,
   "inventory_tab": "Fluids",
   "fluid": {
-    "flow_rate": 0.25,
-    "gravity_rate": 1.0,
-    "spread_distance": 7,
+    "level_decrease": 1,
+    "tick_delay": 5,
+    "slope_find_distance": 4,
     "fog_color": [
       0.05,
       0.2,

@@ -293,6 +293,9 @@ pub struct Game3DPipeline {
     /// (glass). Reuses the same pbr_vct shader and layouts; the only state
     /// changes are blend mode and depth-write disabled. Created on first use.
     transparent_pipeline: Option<wgpu::RenderPipeline>,
+    /// Glass (transparent solid) pipeline. Same shader/blend as `transparent_pipeline`
+    /// but back-face culled, so a solid glass cube never shows its rear/interior faces.
+    glass_pipeline: Option<wgpu::RenderPipeline>,
     uniform_buffer:    wgpu::Buffer,
     bind_group_layout: wgpu::BindGroupLayout,
     depth_texture:     Option<wgpu::Texture>,
@@ -303,6 +306,10 @@ pub struct Game3DPipeline {
     water_meshes:      HashMap<(i32, i32, i32), ChunkMesh>,
     /// Glass / transparent-solid meshes — alpha-blended chunk geometry pass.
     transparent_meshes: HashMap<(i32, i32, i32), ChunkMesh>,
+    /// Foliage meshes (Cross/CropGrid) — rendered without backface culling.
+    foliage_meshes: HashMap<(i32, i32, i32), ChunkMesh>,
+    /// Slab meshes — rendered in the opaque pass.
+    slab_meshes: HashMap<(i32, i32, i32), ChunkMesh>,
     vram_usage:        u64,
     /// LRU order: front = oldest inserted, back = most recently inserted.
     /// Used to evict farthest chunks when VRAM budget is exceeded.
@@ -598,6 +605,7 @@ impl Game3DPipeline {
         Self {
             pipeline,
             transparent_pipeline: None,
+            glass_pipeline: None,
             uniform_buffer,
             bind_group_layout,
             depth_texture: None,
@@ -606,6 +614,8 @@ impl Game3DPipeline {
             chunk_meshes:  HashMap::new(),
             water_meshes:  HashMap::new(),
             transparent_meshes: HashMap::new(),
+            foliage_meshes: HashMap::new(),
+            slab_meshes:    HashMap::new(),
             vram_usage:    UNIFORM_SIZE,
             lru_order:               VecDeque::new(),
             culled_last_frame:       0,
@@ -786,6 +796,14 @@ impl Game3DPipeline {
                 freed   += mesh.vram_bytes;
                 removed += 1;
             }
+            if let Some(mesh) = self.foliage_meshes.remove(key) {
+                freed   += mesh.vram_bytes;
+                removed += 1;
+            }
+            if let Some(mesh) = self.slab_meshes.remove(key) {
+                freed   += mesh.vram_bytes;
+                removed += 1;
+            }
         }
         if removed > 0 {
             self.vram_usage = self.vram_usage.saturating_sub(freed);
@@ -804,6 +822,32 @@ impl Game3DPipeline {
         let mut freed = 0u64;
         for key in keys {
             if let Some(mesh) = self.transparent_meshes.remove(key) {
+                freed += mesh.vram_bytes;
+            }
+        }
+        if freed > 0 {
+            self.vram_usage = self.vram_usage.saturating_sub(freed);
+        }
+    }
+
+    /// Remove foliage (Cross/CropGrid) meshes for rebuilt chunk keys.
+    pub fn evict_foliage_for_keys(&mut self, keys: &[(i32, i32, i32)]) {
+        let mut freed = 0u64;
+        for key in keys {
+            if let Some(mesh) = self.foliage_meshes.remove(key) {
+                freed += mesh.vram_bytes;
+            }
+        }
+        if freed > 0 {
+            self.vram_usage = self.vram_usage.saturating_sub(freed);
+        }
+    }
+
+    /// Remove slab meshes for rebuilt chunk keys.
+    pub fn evict_slab_for_keys(&mut self, keys: &[(i32, i32, i32)]) {
+        let mut freed = 0u64;
+        for key in keys {
+            if let Some(mesh) = self.slab_meshes.remove(key) {
                 freed += mesh.vram_bytes;
             }
         }
@@ -859,6 +903,58 @@ impl Game3DPipeline {
         }
         self.vram_usage += vram_bytes;
         self.transparent_meshes.insert(key, make_chunk_mesh(
+            device, vertex_buffer, index_buffer,
+            index_count, vram_bytes, aabb_min, aabb_max,
+        ));
+    }
+
+    // -----------------------------------------------------------------------
+    // Foliage mesh management
+    // -----------------------------------------------------------------------
+
+    /// Insert or replace a foliage (Cross/CropGrid) mesh for a chunk.
+    pub fn insert_foliage_mesh(
+        &mut self,
+        device:        &wgpu::Device,
+        key:           (i32, i32, i32),
+        vertex_buffer: wgpu::Buffer,
+        index_buffer:  wgpu::Buffer,
+        index_count:   u32,
+        vram_bytes:    u64,
+        aabb_min:      [f32; 3],
+        aabb_max:      [f32; 3],
+    ) {
+        if let Some(old) = self.foliage_meshes.remove(&key) {
+            self.vram_usage = self.vram_usage.saturating_sub(old.vram_bytes);
+        }
+        self.vram_usage += vram_bytes;
+        self.foliage_meshes.insert(key, make_chunk_mesh(
+            device, vertex_buffer, index_buffer,
+            index_count, vram_bytes, aabb_min, aabb_max,
+        ));
+    }
+
+    // -----------------------------------------------------------------------
+    // Slab mesh management
+    // -----------------------------------------------------------------------
+
+    /// Insert or replace a slab mesh for a chunk.
+    pub fn insert_slab_mesh(
+        &mut self,
+        device:        &wgpu::Device,
+        key:           (i32, i32, i32),
+        vertex_buffer: wgpu::Buffer,
+        index_buffer:  wgpu::Buffer,
+        index_count:   u32,
+        vram_bytes:    u64,
+        aabb_min:      [f32; 3],
+        aabb_max:      [f32; 3],
+    ) {
+        if let Some(old) = self.slab_meshes.remove(&key) {
+            self.vram_usage = self.vram_usage.saturating_sub(old.vram_bytes);
+        }
+        self.vram_usage += vram_bytes;
+        self.slab_meshes.insert(key, make_chunk_mesh(
             device, vertex_buffer, index_buffer,
             index_count, vram_bytes, aabb_min, aabb_max,
         ));
@@ -1048,6 +1144,16 @@ impl Game3DPipeline {
         let mut visible_tris     = 0u32;
         let mut visible_vram     = 0u64;
         for mesh in self.chunk_meshes.values() {
+            if !frustum.intersects_aabb(mesh.aabb_min, mesh.aabb_max) { continue; }
+            pass.set_vertex_buffer(0, mesh.vertex_buffer.slice(..));
+            pass.set_index_buffer(mesh.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
+            pass.draw_indexed_indirect(&mesh.indirect_buffer, 0);
+            draw_calls   += 1;
+            visible_tris += mesh.index_count / 3;
+            visible_vram += mesh.vram_bytes;
+        }
+        // Slab meshes rendered in the same opaque pass (same pipeline, backface culling).
+        for mesh in self.slab_meshes.values() {
             if !frustum.intersects_aabb(mesh.aabb_min, mesh.aabb_max) { continue; }
             pass.set_vertex_buffer(0, mesh.vertex_buffer.slice(..));
             pass.set_index_buffer(mesh.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
@@ -1514,13 +1620,17 @@ impl Game3DPipeline {
     /// Build the alpha-blended chunk pipeline used for glass blocks.
     /// Reuses the same `pbr_vct.wgsl` shader and bind group layouts as the
     /// opaque chunk pipeline so we get full PBR + GI + tinted shadows.
-    fn init_transparent_pipeline(
-        &mut self,
+    /// Build an alpha-blended chunk pipeline (pbr_vct shader, depth-write on).
+    /// `cull_mode` distinguishes glass (back-face culled, solid cube) from foliage
+    /// (two-sided, no culling). The fragment shader decides per-texel opacity from
+    /// the transparent vertex flag, so both share one shader.
+    fn build_blend_pipeline(
+        &self,
         device: &wgpu::Device,
         vct_frag_bgl: &wgpu::BindGroupLayout,
-    ) {
-        debug_log!("Game3DPipeline", "init_transparent_pipeline",
-            "Creating alpha-blended chunk pipeline (glass)");
+        cull_mode: Option<wgpu::Face>,
+        label: &str,
+    ) -> wgpu::RenderPipeline {
         let vertex_attrs = wgpu::vertex_attr_array![
             0 => Float32x3, 1 => Snorm8x4, 2 => Unorm8x4,
             3 => Float32x2, 4 => Unorm8x4, 5 => Float32x4, 6 => Snorm8x4,
@@ -1539,17 +1649,8 @@ impl Game3DPipeline {
             },
         );
 
-        let _vertex_layout = wgpu::VertexBufferLayout {
-            array_stride: std::mem::size_of::<Vertex3D>() as wgpu::BufferAddress,
-            step_mode:    wgpu::VertexStepMode::Vertex,
-            attributes:   &wgpu::vertex_attr_array![
-                0 => Float32x3, 1 => Snorm8x4, 2 => Unorm8x4,
-                3 => Float32x2, 4 => Unorm8x4, 5 => Float32x4, 6 => Snorm8x4,
-            ],
-        };
-
-        let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label:  Some("Game3D Transparent Pipeline"),
+        device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label:  Some(label),
             layout: Some(&pipeline_layout),
             vertex: wgpu::VertexState {
                 module:              &shader,
@@ -1573,9 +1674,7 @@ impl Game3DPipeline {
             }),
             primitive: wgpu::PrimitiveState {
                 topology:   wgpu::PrimitiveTopology::TriangleList,
-                // Don't cull — glass is two-sided to keep both faces visible
-                // when looking from inside (e.g. greenhouse interior).
-                cull_mode:  None,
+                cull_mode,
                 front_face: wgpu::FrontFace::Ccw,
                 ..Default::default()
             },
@@ -1591,10 +1690,35 @@ impl Game3DPipeline {
             multisample: wgpu::MultisampleState::default(),
             cache: None,
             multiview_mask: None,
-        });
+        })
+    }
 
+    /// Foliage pipeline — two-sided (cross/cropgrid quads must show from both sides).
+    fn init_transparent_pipeline(
+        &mut self,
+        device: &wgpu::Device,
+        vct_frag_bgl: &wgpu::BindGroupLayout,
+    ) {
+        debug_log!("Game3DPipeline", "init_transparent_pipeline",
+            "Creating alpha-blended foliage pipeline (two-sided)");
+        let pipeline = self.build_blend_pipeline(device, vct_frag_bgl, None, "Game3D Foliage Pipeline");
         self.transparent_pipeline = Some(pipeline);
-        debug_log!("Game3DPipeline", "init_transparent_pipeline", "Transparent pipeline ready");
+        debug_log!("Game3DPipeline", "init_transparent_pipeline", "Foliage pipeline ready");
+    }
+
+    /// Glass pipeline — back-face culled so a solid glass cube never reveals its
+    /// rear/interior faces through the transparent front (fixes visible inner seams).
+    fn init_glass_pipeline(
+        &mut self,
+        device: &wgpu::Device,
+        vct_frag_bgl: &wgpu::BindGroupLayout,
+    ) {
+        debug_log!("Game3DPipeline", "init_glass_pipeline",
+            "Creating alpha-blended glass pipeline (back-face culled)");
+        let pipeline = self.build_blend_pipeline(
+            device, vct_frag_bgl, Some(wgpu::Face::Back), "Game3D Glass Pipeline");
+        self.glass_pipeline = Some(pipeline);
+        debug_log!("Game3DPipeline", "init_glass_pipeline", "Glass pipeline ready");
     }
 
     /// Render glass / transparent solid meshes. Call AFTER opaque chunks but
@@ -1614,10 +1738,10 @@ impl Game3DPipeline {
     ) {
         if self.transparent_meshes.is_empty() { return; }
         if self.depth_view.is_none() { return; }
-        if self.transparent_pipeline.is_none() {
-            self.init_transparent_pipeline(device, vct_frag_bgl);
+        if self.glass_pipeline.is_none() {
+            self.init_glass_pipeline(device, vct_frag_bgl);
         }
-        let pipeline = self.transparent_pipeline.as_ref().unwrap();
+        let pipeline = self.glass_pipeline.as_ref().unwrap();
 
         // Re-upload lighting uniforms (the water pass clobbers time_params.z).
         let uniform_bytes: &[u8] = unsafe {
@@ -1678,6 +1802,96 @@ impl Game3DPipeline {
         pass.set_bind_group(1, vct_bind_group, &[]);
 
         for mesh in self.transparent_meshes.values() {
+            if !frustum.intersects_aabb(mesh.aabb_min, mesh.aabb_max) { continue; }
+            pass.set_vertex_buffer(0, mesh.vertex_buffer.slice(..));
+            pass.set_index_buffer(mesh.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
+            pass.draw_indexed_indirect(&mesh.indirect_buffer, 0);
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // Foliage rendering — Cross/CropGrid, no backface culling, alpha-blended
+    // -----------------------------------------------------------------------
+
+    /// Render foliage meshes (Cross/CropGrid blocks).
+    /// Reuses the transparent pipeline (no backface culling, depth-write enabled).
+    /// Call AFTER opaque chunks and glass, BEFORE water.
+    pub fn render_foliage(
+        &mut self,
+        encoder:        &mut wgpu::CommandEncoder,
+        color_view:     &wgpu::TextureView,
+        device:         &wgpu::Device,
+        queue:          &wgpu::Queue,
+        camera:         &Camera,
+        atlas_view:     &wgpu::TextureView,
+        normal_atlas_view: &wgpu::TextureView,
+        lighting_data:  &[f32; 68],
+        vct_bind_group: &wgpu::BindGroup,
+        vct_frag_bgl:   &wgpu::BindGroupLayout,
+    ) {
+        if self.foliage_meshes.is_empty() { return; }
+        if self.depth_view.is_none() { return; }
+        if self.transparent_pipeline.is_none() {
+            self.init_transparent_pipeline(device, vct_frag_bgl);
+        }
+        let pipeline = self.transparent_pipeline.as_ref().unwrap();
+
+        let uniform_bytes: &[u8] = unsafe {
+            std::slice::from_raw_parts(
+                lighting_data.as_ptr() as *const u8,
+                std::mem::size_of::<[f32; 68]>(),
+            )
+        };
+        queue.write_buffer(&self.uniform_buffer, 0, uniform_bytes);
+
+        let atlas_ptr        = atlas_view        as *const _ as usize;
+        let normal_atlas_ptr = normal_atlas_view as *const _ as usize;
+        if self.cached_bg.is_none()
+            || atlas_ptr        != self.cached_atlas_ptr
+            || normal_atlas_ptr != self.cached_normal_atlas_ptr
+        {
+            self.cached_bg = Some(device.create_bind_group(&wgpu::BindGroupDescriptor {
+                label:   Some("Game3D BG (foliage)"),
+                layout:  &self.bind_group_layout,
+                entries: &[
+                    wgpu::BindGroupEntry { binding: 0, resource: self.uniform_buffer.as_entire_binding() },
+                    wgpu::BindGroupEntry { binding: 1, resource: wgpu::BindingResource::TextureView(atlas_view) },
+                    wgpu::BindGroupEntry { binding: 2, resource: wgpu::BindingResource::Sampler(self.atlas_sampler.as_ref().unwrap()) },
+                    wgpu::BindGroupEntry { binding: 3, resource: wgpu::BindingResource::TextureView(normal_atlas_view) },
+                    wgpu::BindGroupEntry { binding: 4, resource: wgpu::BindingResource::Sampler(self.atlas_sampler.as_ref().unwrap()) },
+                ],
+            }));
+            self.cached_atlas_ptr        = atlas_ptr;
+            self.cached_normal_atlas_ptr = normal_atlas_ptr;
+        }
+        let bg = self.cached_bg.as_ref().unwrap();
+
+        let vp      = camera.view_projection_matrix();
+        let frustum = FrustumPlanes::from_view_projection(&vp);
+
+        let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            label: Some("Foliage Pass"),
+            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                view:           color_view,
+                resolve_target: None,
+                ops: wgpu::Operations { load: wgpu::LoadOp::Load, store: wgpu::StoreOp::Store },
+                depth_slice: None,
+            })],
+            depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                view:      self.depth_view.as_ref().unwrap(),
+                depth_ops: Some(wgpu::Operations { load: wgpu::LoadOp::Load, store: wgpu::StoreOp::Store }),
+                stencil_ops: None,
+            }),
+            timestamp_writes:    None,
+            occlusion_query_set: None,
+            multiview_mask:      None,
+        });
+
+        pass.set_pipeline(pipeline);
+        pass.set_bind_group(0, bg, &[]);
+        pass.set_bind_group(1, vct_bind_group, &[]);
+
+        for mesh in self.foliage_meshes.values() {
             if !frustum.intersects_aabb(mesh.aabb_min, mesh.aabb_max) { continue; }
             pass.set_vertex_buffer(0, mesh.vertex_buffer.slice(..));
             pass.set_index_buffer(mesh.index_buffer.slice(..), wgpu::IndexFormat::Uint32);

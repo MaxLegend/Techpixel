@@ -22,9 +22,9 @@
     "transparent": false,
     "inventory_tab": "Fluids",
     "fluid": {
-        "flow_rate": 0.05,
-        "gravity_rate": 0.6,
-        "spread_distance": 3,
+        "level_decrease": 2,
+        "tick_delay": 20,
+        "slope_find_distance": 4,
         "fog_color": [
             0.6,
             0.15,

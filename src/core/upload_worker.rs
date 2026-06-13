@@ -18,6 +18,10 @@ pub enum MeshKind {
     Opaque,
     Water,
     Glass,
+    /// Foliage (Cross/CropGrid) — rendered without backface culling, alpha-blended.
+    Foliage,
+    /// Slab — opaque half-block, rendered in the opaque pass.
+    Slab,
 }
 
 // ---------------------------------------------------------------------------

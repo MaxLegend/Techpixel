@@ -121,6 +121,9 @@ struct VertexOutput {
     // Bitangent precomputed in vertex shader to avoid cross() per fragment.
     // Valid for flat (voxel block) faces; interpolation is exact on planar geometry.
     @location(8)       v_bitangent:  vec3<f32>,
+    // Alpha mode flag carried in tangent.w: 0 = opaque (alpha forced to 1, no
+    // discard), 1 = transparent (glass) → opacity comes from texture.a × v_ao.
+    @location(9)       v_alpha_mode: f32,
 };
 
 @vertex
@@ -139,6 +142,8 @@ fn vs_main(input: VertexInput) -> VertexOutput {
     // On flat voxel faces all vertices share the same N and T, so the
     // interpolated bitangent is identical to recomputing it per-fragment.
     out.v_bitangent  = cross(out.v_normal, out.v_tangent);
+    // tangent.w marks transparent (glass) vertices; xyz is the real tangent.
+    out.v_alpha_mode = input.tangent.w;
     return out;
 }
 
@@ -325,8 +330,7 @@ fn voxel_shadow_directional(world_pos: vec3<f32>, light_dir: vec3<f32>) -> vec3<
     // Pre-skip: starting voxel may be a model block (surface bias landed inside it).
     // Check its AABB at t_prev = 0 before unconditionally skipping.
     {
-        let sv_uv = (vec3<f32>(f32(voxel.x), f32(voxel.y), f32(voxel.z)) + 0.5) / vsize;
-        let sv    = textureSampleLevel(voxel_data, voxel_sampler, sv_uv, 0.0);
+        let sv = textureLoad(voxel_data, voxel, 0);
         if (sv.a > 0.2 && sv.a < 0.5) {
             let block_lut = u32(round(sv.r * 255.0));
             let hdr       = model_shadow_header[block_lut];
@@ -368,8 +372,7 @@ fn voxel_shadow_directional(world_pos: vec3<f32>, light_dir: vec3<f32>) -> vec3<
             return transmission; // Exited texture — lit by sun (with any accumulated glass tint)
         }
 
-        let uv = vec3<f32>(f32(voxel.x) + 0.5, f32(voxel.y) + 0.5, f32(voxel.z) + 0.5) / vsize;
-        let data = textureSampleLevel(voxel_data, voxel_sampler, uv, 0.0);
+        let data = textureLoad(voxel_data, voxel, 0);
 
         // Fluid voxel (water/lava): absorb light gradually, no hard shadow.
         if (data.a > 0.0 && data.a < FLUID_ALPHA_MAX) {
@@ -379,7 +382,7 @@ fn voxel_shadow_directional(world_pos: vec3<f32>, light_dir: vec3<f32>) -> vec3<
             }
         // Glass voxel: accumulate coloured transmission and continue.
         } else if (data.a >= GLASS_ALPHA_MIN && data.a <= GLASS_ALPHA_MAX) {
-            let tint = textureSampleLevel(voxel_tint, voxel_sampler, uv, 0.0);
+            let tint = textureLoad(voxel_tint, voxel, 0);
             let op   = tint.a;
             // Per-channel transmission: clear glass passes everything, fully
             // opaque glass would block — but we cap at small minimum so glass
@@ -392,7 +395,7 @@ fn voxel_shadow_directional(world_pos: vec3<f32>, light_dir: vec3<f32>) -> vec3<
             }
         } else if (data.a > 0.85) {
             // Fully opaque solid block.
-            let rad = textureSampleLevel(voxel_radiance, voxel_sampler, uv, 0.0);
+            let rad = textureLoad(voxel_radiance, voxel, 0);
             let is_emissive = rad.a > 0.5 && dot(rad.rgb, rad.rgb) > 0.1;
             if (!is_emissive) {
                 return vec3<f32>(0.0); // Hit opaque non-emissive block — in shadow
@@ -499,8 +502,7 @@ fn voxel_shadow_to_point(world_pos: vec3<f32>, light_pos: vec3<f32>, source_vox:
 
     // Pre-skip: starting voxel may be a model block.
     {
-        let sv_uv = (vec3<f32>(f32(voxel.x), f32(voxel.y), f32(voxel.z)) + 0.5) / vsize;
-        let sv    = textureSampleLevel(voxel_data, voxel_sampler, sv_uv, 0.0);
+        let sv = textureLoad(voxel_data, voxel, 0);
         if (sv.a > 0.2 && sv.a < 0.5) {
             let block_lut = u32(round(sv.r * 255.0));
             let hdr       = model_shadow_header[block_lut];
@@ -554,10 +556,16 @@ fn voxel_shadow_to_point(world_pos: vec3<f32>, light_pos: vec3<f32>, source_vox:
             continue;
         }
 
-        let uv = vec3<f32>(f32(voxel.x) + 0.5, f32(voxel.y) + 0.5, f32(voxel.z) + 0.5) / vsize;
+        // Air fast-path: a single voxel_data fetch decides everything.
+        // The emissive-skip below needs radiance only for non-air voxels
+        // (air radiance is written with alpha 0, so it can never pass the
+        // rad.a > 0.5 test) — skipping the radiance fetch in air is exact.
+        let data = textureLoad(voxel_data, voxel, 0);
+        let opacity = data.a;
 
+        if (opacity > 0.0) {
         // Emissive voxels don't block light
-        let rad = textureSampleLevel(voxel_radiance, voxel_sampler, uv, 0.0);
+        let rad = textureLoad(voxel_radiance, voxel, 0);
         if (rad.a > 0.5 && dot(rad.rgb, rad.rgb) > 2.0) {
             if (t_max.x <= t_max.y && t_max.x <= t_max.z) {
                 voxel.x = voxel.x + step_x;
@@ -575,18 +583,15 @@ fn voxel_shadow_to_point(world_pos: vec3<f32>, light_pos: vec3<f32>, source_vox:
             continue;
         }
 
-        let data = textureSampleLevel(voxel_data, voxel_sampler, uv, 0.0);
-        let opacity = data.a;
-
         // Fluid voxel: gradual absorption, no hard shadow.
-        if (opacity > 0.0 && opacity < FLUID_ALPHA_MAX) {
+        if (opacity < FLUID_ALPHA_MAX) {
             transmission = transmission * WATER_ABSORPTION;
             if (dot(transmission, transmission) < 0.001) {
                 return vec3<f32>(0.0);
             }
         // Glass voxel: accumulate coloured transmission and continue.
         } else if (opacity >= GLASS_ALPHA_MIN && opacity <= GLASS_ALPHA_MAX) {
-            let tint = textureSampleLevel(voxel_tint, voxel_sampler, uv, 0.0);
+            let tint = textureLoad(voxel_tint, voxel, 0);
             let op   = tint.a;
             let mult = mix(vec3<f32>(1.0), tint.rgb, op) * (1.0 - 0.85 * op);
             transmission = transmission * mult;
@@ -613,6 +618,7 @@ fn voxel_shadow_to_point(world_pos: vec3<f32>, light_pos: vec3<f32>, source_vox:
                 }
             }
         }
+        } // end non-air branch
 
         if (t_max.x <= t_max.y && t_max.x <= t_max.z) {
             voxel.x = voxel.x + step_x;
@@ -661,6 +667,9 @@ fn eval_point_light(
     if (dist > range) { return vec3<f32>(0.0); }
 
     let L = to_light / max(dist, 0.001);
+    // Surface faces away from the light — PBR term is exactly zero,
+    // skip attenuation + voxel shadow march entirely.
+    if (dot(N, L) <= 0.0) { return vec3<f32>(0.0); }
 
     // Smooth quadratic attenuation
     let t = clamp(dist / range, 0.0, 1.0);
@@ -694,6 +703,8 @@ fn eval_spot_light(
     if (dist > range) { return vec3<f32>(0.0); }
 
     let L = to_light / max(dist, 0.001);
+    // Surface faces away from the light — PBR term is exactly zero.
+    if (dot(N, L) <= 0.0) { return vec3<f32>(0.0); }
     let spot_dir = normalize(light.dir_inner.xyz);
     let cos_angle = dot(-L, spot_dir);
 
@@ -740,8 +751,9 @@ const CONTRAST_POWER: f32 = 1.15;
 @fragment
 fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
     // ----- Texture + albedo -----
-    let tex_color = textureSample(atlas_tex, atlas_sampler, input.v_texcoord).rgb;
-    let albedo    = input.v_color * tex_color;
+    // Sample full RGBA: .rgb feeds albedo, .a drives per-texel opacity for glass.
+    let tex    = textureSample(atlas_tex, atlas_sampler, input.v_texcoord);
+    let albedo = input.v_color * tex.rgb;
 
     // V must be computed first — used to orient the normal for two-sided rendering.
     let V = normalize(u.camera_pos.xyz - input.v_world_pos);
@@ -786,11 +798,14 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
     // ===========================================
     let sun_intensity = u.sun_direction.w;
     if (sun_intensity > 0.001) {
-        let sun_L        = normalize(u.sun_direction.xyz);
-        let sun_radiance = u.sun_color.rgb * sun_intensity;
-        var sun_shadow = vec3<f32>(1.0);
-        if (sun_shadow_on) { sun_shadow = voxel_shadow_directional(shadow_origin, sun_L); }
-        lo += compute_pbr_light(N, V, sun_L, sun_radiance * sun_shadow, albedo, f0, roughness, metalness);
+        let sun_L = normalize(u.sun_direction.xyz);
+        // N·L ≤ 0 → compute_pbr_light is exactly zero; skip the shadow ray march.
+        if (dot(N, sun_L) > 0.0) {
+            let sun_radiance = u.sun_color.rgb * sun_intensity;
+            var sun_shadow = vec3<f32>(1.0);
+            if (sun_shadow_on) { sun_shadow = voxel_shadow_directional(shadow_origin, sun_L); }
+            lo += compute_pbr_light(N, V, sun_L, sun_radiance * sun_shadow, albedo, f0, roughness, metalness);
+        }
     }
 
     // ===========================================
@@ -798,11 +813,14 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
     // ===========================================
     let moon_intensity = u.moon_direction.w;
     if (moon_intensity > 0.001) {
-        let moon_L        = normalize(u.moon_direction.xyz);
-        let moon_radiance = u.moon_color.rgb * moon_intensity;
-        var moon_shadow = vec3<f32>(1.0);
-        if (sun_shadow_on) { moon_shadow = voxel_shadow_directional(shadow_origin, moon_L); }
-        lo += compute_pbr_light(N, V, moon_L, moon_radiance * moon_shadow, albedo, f0, roughness, metalness);
+        let moon_L = normalize(u.moon_direction.xyz);
+        // N·L ≤ 0 → contribution is exactly zero; skip the shadow ray march.
+        if (dot(N, moon_L) > 0.0) {
+            let moon_radiance = u.moon_color.rgb * moon_intensity;
+            var moon_shadow = vec3<f32>(1.0);
+            if (sun_shadow_on) { moon_shadow = voxel_shadow_directional(shadow_origin, moon_L); }
+            lo += compute_pbr_light(N, V, moon_L, moon_radiance * moon_shadow, albedo, f0, roughness, metalness);
+        }
     }
 
     // ===========================================
@@ -872,5 +890,16 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
     // --- Contrast (power curve around mid-grey) ---
     color = pow(color, vec3<f32>(CONTRAST_POWER));
 
-    return vec4<f32>(color, vertex_ao);
+    // ----- Output alpha -----
+    // Opaque geometry (v_alpha_mode ≈ 0) is written fully opaque. Glass geometry
+    // (v_alpha_mode ≈ 1) takes opacity from the texture's alpha channel × the
+    // per-block opacity (carried in v_ao): opaque texels stay solid, partial texels
+    // stay partial, and fully-clear texels are discarded (→ no colour blend and no
+    // depth write), so a textured glass block is no longer uniformly see-through.
+    var out_alpha = 1.0;
+    if (input.v_alpha_mode > 0.5) {
+        out_alpha = tex.a * vertex_ao;
+        if (out_alpha < 0.02) { discard; }
+    }
+    return vec4<f32>(color, out_alpha);
 }

@@ -77,8 +77,8 @@ pub struct SavedChunk {
     pub blocks:       Vec<u8>,
     /// Full rotation array.
     pub rotations:    Vec<u8>,
-    /// Sparse fluid levels — only non-zero entries stored as (flat_index, value_bits).
-    pub fluid_sparse: Vec<(u32, u32)>,
+    /// Sparse discrete fluid levels — only non-zero entries stored as (flat_index, level_0_8).
+    pub fluid_sparse: Vec<(u32, u8)>,
 }
 
 // ---------------------------------------------------------------------------

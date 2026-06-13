@@ -42,6 +42,11 @@ pub struct VoxelSnapshot {
     /// Flat array of block IDs.  Index = `vol_idx(x, y, z)`.
     /// 0 = air, 1..=255 = solid block type.
     pub blocks: Vec<u8>,
+    /// Optional world-space AABB (inclusive min, inclusive max) of the voxels that
+    /// changed since the previous snapshot. When `Some` *and* the volume origin is
+    /// unchanged, the GPU upload patches only this sub-box instead of the full 128³.
+    /// `None` ⇒ treat the whole volume as changed (full re-upload).
+    pub dirty_region: Option<([i32; 3], [i32; 3])>,
 }
 
 // ---------------------------------------------------------------------------
@@ -95,29 +100,23 @@ fn pack_nibble_pair(lo: f32, hi: f32) -> u8 {
     (lo4 << 4) | (hi4 & 0xF)
 }
 
-/// Convert a `VoxelSnapshot` into GPU-ready RGBA8 arrays using the block registry.
+/// Build the per-block-ID lookup tables used to pack voxel textures.
 ///
-/// Returns `(voxel_data, voxel_emission, voxel_tint)` — each is `VOLUME_TOTAL` pixels.
-/// Layout is Z-outer, Y-middle, X-inner to match `write_texture` convention.
-///
-/// `voxel_tint` is only filled for glass voxels (`def.is_glass()`); all other
-/// voxels have a zeroed entry. Shaders detect glass by `voxel_data.a` falling
-/// inside the glass band (`VOXEL_ALPHA_GLASS / 255 ≈ 0.706`).
-pub fn pack_volume(
-    snapshot: &VoxelSnapshot,
+/// Returns `(lut_data, lut_emission, lut_tint)` — each 256 entries indexed by
+/// block_id (entry 0 = air = all zero). Shared by `pack_volume` (full volume) and
+/// `VCTSystem::upload_region` (incremental sub-box) so the packing rules live in
+/// exactly one place.
+pub(crate) fn build_volume_luts(
     registry: &BlockRegistry,
-) -> (Vec<VoxelDataPixel>, Vec<VoxelEmissionPixel>, Vec<VoxelTintPixel>) {
-    let n = VOLUME_TOTAL;
-    let mut data     = vec![[0u8; 4]; n];
-    let mut emission = vec![[0u8; 4]; n];
-    let mut tint     = vec![[0u8; 4]; n];
+) -> ([VoxelDataPixel; 256], [VoxelEmissionPixel; 256], [VoxelTintPixel; 256]) {
+    // Per-block-ID LUTs (256 entries) — the per-voxel loop then reduces to three
+    // array copies per voxel instead of a registry lookup + branch chain.
+    let mut lut_data     = [[0u8; 4]; 256];
+    let mut lut_emission = [[0u8; 4]; 256];
+    let mut lut_tint     = [[0u8; 4]; 256];
 
-    for i in 0..n {
-        let block_id = snapshot.blocks[i];
-        if block_id == 0 {
-            continue; // air — already zeroed
-        }
-
+    for block_id in 1u8..=255 {
+        let li = block_id as usize;
         if let Some(def) = registry.get(block_id) {
             let c = &def.color;
             let is_model_block = def.model.is_some();
@@ -145,7 +144,7 @@ pub fn pack_volume(
             if is_glass_block {
                 voxel_alpha = VOXEL_ALPHA_GLASS; // 180
                 let gp = &def.glass;
-                tint[i] = [
+                lut_tint[li] = [
                     (gp.tint_color[0] * 255.0).min(255.0) as u8,
                     (gp.tint_color[1] * 255.0).min(255.0) as u8,
                     (gp.tint_color[2] * 255.0).min(255.0) as u8,
@@ -159,7 +158,7 @@ pub fn pack_volume(
                 voxel_alpha = VOXEL_ALPHA_FLUID; // 40
             }
 
-            data[i] = [r, g, b, voxel_alpha];
+            lut_data[li] = [r, g, b, voxel_alpha];
 
             if def.emission.emit_light {
                 let ec = &def.emission.light_color;
@@ -169,7 +168,7 @@ pub fn pack_volume(
                 let range_scale = (def.emission.light_range / MAX_LIGHT_RANGE).clamp(0.0, 1.0);
                 let ei = (def.emission.light_intensity * def.emission.light_strength * range_scale)
                     .clamp(0.0, 1.0);
-                emission[i] = [
+                lut_emission[li] = [
                     (ec[0] * 255.0).min(255.0) as u8,
                     (ec[1] * 255.0).min(255.0) as u8,
                     (ec[2] * 255.0).min(255.0) as u8,
@@ -178,8 +177,37 @@ pub fn pack_volume(
             }
         } else {
             // Unknown block — treat as solid grey
-            data[i] = [128, 128, 128, 255];
+            lut_data[li] = [128, 128, 128, 255];
         }
+    }
+
+    (lut_data, lut_emission, lut_tint)
+}
+
+/// Convert a `VoxelSnapshot` into GPU-ready RGBA8 arrays using the block registry.
+///
+/// Returns `(voxel_data, voxel_emission, voxel_tint)` — each is `VOLUME_TOTAL`
+/// pixels. Layout is Z-outer, Y-middle, X-inner to match `write_texture`.
+/// `voxel_tint` is only meaningful for glass voxels; all others are zeroed.
+pub fn pack_volume(
+    snapshot: &VoxelSnapshot,
+    registry: &BlockRegistry,
+) -> (Vec<VoxelDataPixel>, Vec<VoxelEmissionPixel>, Vec<VoxelTintPixel>) {
+    let (lut_data, lut_emission, lut_tint) = build_volume_luts(registry);
+
+    let n = VOLUME_TOTAL;
+    let mut data     = vec![[0u8; 4]; n];
+    let mut emission = vec![[0u8; 4]; n];
+    let mut tint     = vec![[0u8; 4]; n];
+
+    for i in 0..n {
+        let block_id = snapshot.blocks[i] as usize;
+        if block_id == 0 {
+            continue; // air — already zeroed
+        }
+        data[i]     = lut_data[block_id];
+        emission[i] = lut_emission[block_id];
+        tint[i]     = lut_tint[block_id];
     }
 
     (data, emission, tint)

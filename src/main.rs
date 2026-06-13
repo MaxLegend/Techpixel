@@ -310,6 +310,19 @@ fn main() {
                             }
                         }
 
+                        // F2 — save a screenshot of the next frame to screenshots/
+                        WindowEvent::KeyboardInput {
+                            event: KeyEvent {
+                                physical_key: PhysicalKey::Code(KeyCode::F2),
+                                state: ElementState::Pressed,
+                                repeat: false,
+                                ..
+                            },
+                            ..
+                        } => {
+                            app.renderer.request_screenshot();
+                        }
+
                         // F11 — toggle borderless fullscreen
                         WindowEvent::KeyboardInput {
                             event: KeyEvent {

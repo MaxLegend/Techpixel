@@ -14,6 +14,15 @@ pub struct AcquiredFrame {
     pub view:            wgpu::TextureView,
 }
 
+/// In-flight screenshot readback: GPU buffer + layout needed to decode it.
+struct ScreenshotCopy {
+    buffer:     wgpu::Buffer,
+    padded_bpr: u32,
+    width:      u32,
+    height:     u32,
+    format:     wgpu::TextureFormat,
+}
+
 pub struct Renderer {
     surface: wgpu::Surface<'static>,
     device: wgpu::Device,
@@ -21,6 +30,10 @@ pub struct Renderer {
     config: wgpu::SurfaceConfiguration,
     size: winit::dpi::PhysicalSize<u32>,
     pending_size: Option<winit::dpi::PhysicalSize<u32>>,
+    /// True when the surface supports COPY_SRC (required for screenshots).
+    screenshot_supported: bool,
+    /// Set by `request_screenshot()`; consumed on the next `submit_frame()`.
+    screenshot_requested: bool,
     _window_ref: PhantomData<&'static Window>,
 }
 
@@ -93,6 +106,16 @@ impl Renderer {
         // the FIFO vsync boundary despite the GPU being at <50% utilisation.
         // AutoNoVsync uses Mailbox where available, falls back to Immediate.
         config.present_mode = wgpu::PresentMode::AutoNoVsync;
+
+        // Enable COPY_SRC on the swapchain when the backend allows it, so the
+        // presented frame can be copied out for screenshots (F2).
+        let screenshot_supported = surface
+            .get_capabilities(&adapter)
+            .usages
+            .contains(wgpu::TextureUsages::COPY_SRC);
+        if screenshot_supported {
+            config.usage |= wgpu::TextureUsages::COPY_SRC;
+        }
         surface.configure(&device, &config);
 
         debug_log!(
@@ -107,6 +130,8 @@ impl Renderer {
             queue,
             config,
             size,
+            screenshot_supported,
+            screenshot_requested: false,
             _window_ref: PhantomData,
             pending_size: None,
         }
@@ -212,11 +237,147 @@ impl Renderer {
     /// Submit the encoded commands and present the frame.
     /// `queue.submit()` returns immediately — the GPU starts executing asynchronously.
     /// `present()` hands the image to the display compositor.
-    pub fn submit_frame(&self, encoder: wgpu::CommandEncoder, frame: AcquiredFrame) {
+    pub fn submit_frame(&mut self, mut encoder: wgpu::CommandEncoder, frame: AcquiredFrame) {
+        // Screenshot: append a texture→buffer copy of the finished frame
+        // before submit, read it back after submit (one-frame hitch is fine).
+        let screenshot_copy = if self.screenshot_requested {
+            self.screenshot_requested = false;
+            self.encode_screenshot_copy(&mut encoder, &frame.surface_texture.texture)
+        } else {
+            None
+        };
+
         let t = Instant::now();
         self.queue.submit(std::iter::once(encoder.finish()));
         frame.surface_texture.present();
         crate::core::frame_timing::set_submit_present(t.elapsed().as_micros());
+
+        if let Some(copy) = screenshot_copy {
+            self.finish_screenshot(copy);
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // Screenshot capture (F2)
+    // -----------------------------------------------------------------------
+
+    /// Request that the next presented frame be saved as a PNG into `screenshots/`.
+    pub fn request_screenshot(&mut self) {
+        if !self.screenshot_supported {
+            debug_log!("Renderer", "request_screenshot",
+                "Screenshot not supported: surface lacks COPY_SRC usage");
+            return;
+        }
+        self.screenshot_requested = true;
+        debug_log!("Renderer", "request_screenshot", "Screenshot requested for next frame");
+    }
+
+    /// Encode a copy of the swapchain texture into a freshly created readback buffer.
+    /// Returns the buffer plus layout info needed to decode it after submission.
+    fn encode_screenshot_copy(
+        &self,
+        encoder: &mut wgpu::CommandEncoder,
+        texture: &wgpu::Texture,
+    ) -> Option<ScreenshotCopy> {
+        let width  = self.config.width;
+        let height = self.config.height;
+        if width == 0 || height == 0 {
+            return None;
+        }
+
+        // Rows in a texture→buffer copy must be 256-byte aligned.
+        let bytes_per_pixel  = 4u32;
+        let unpadded_bpr     = width * bytes_per_pixel;
+        let padded_bpr       = unpadded_bpr.div_ceil(wgpu::COPY_BYTES_PER_ROW_ALIGNMENT)
+                             * wgpu::COPY_BYTES_PER_ROW_ALIGNMENT;
+
+        let buffer = self.device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("Screenshot Readback"),
+            size:  (padded_bpr as u64) * (height as u64),
+            usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+            mapped_at_creation: false,
+        });
+
+        encoder.copy_texture_to_buffer(
+            wgpu::TexelCopyTextureInfo {
+                texture,
+                mip_level: 0,
+                origin: wgpu::Origin3d::ZERO,
+                aspect: wgpu::TextureAspect::All,
+            },
+            wgpu::TexelCopyBufferInfo {
+                buffer: &buffer,
+                layout: wgpu::TexelCopyBufferLayout {
+                    offset: 0,
+                    bytes_per_row: Some(padded_bpr),
+                    rows_per_image: Some(height),
+                },
+            },
+            wgpu::Extent3d { width, height, depth_or_array_layers: 1 },
+        );
+
+        Some(ScreenshotCopy {
+            buffer,
+            padded_bpr,
+            width,
+            height,
+            format: self.config.format,
+        })
+    }
+
+    /// Map the readback buffer (blocking) and hand pixel data to a background
+    /// thread that encodes and writes the PNG.
+    fn finish_screenshot(&self, copy: ScreenshotCopy) {
+        let slice = copy.buffer.slice(..);
+        slice.map_async(wgpu::MapMode::Read, |_| {});
+        // Blocking wait — acceptable one-off hitch for a manual screenshot.
+        let _ = self.device.poll(wgpu::PollType::wait_indefinitely());
+
+        let mapped = slice.get_mapped_range();
+        let mut pixels = Vec::with_capacity((copy.width * copy.height * 4) as usize);
+        let row_len = (copy.width * 4) as usize;
+        for row in 0..copy.height as usize {
+            let start = row * copy.padded_bpr as usize;
+            pixels.extend_from_slice(&mapped[start..start + row_len]);
+        }
+        drop(mapped);
+        copy.buffer.unmap();
+
+        // Swapchain formats are usually BGRA — convert to RGBA for the PNG encoder.
+        let is_bgra = matches!(
+            copy.format,
+            wgpu::TextureFormat::Bgra8Unorm | wgpu::TextureFormat::Bgra8UnormSrgb
+        );
+        if is_bgra {
+            for px in pixels.chunks_exact_mut(4) {
+                px.swap(0, 2);
+            }
+        }
+        // Alpha channel of the swapchain is undefined for an opaque window — force 255.
+        for px in pixels.chunks_exact_mut(4) {
+            px[3] = 255;
+        }
+
+        let (width, height) = (copy.width, copy.height);
+        // PNG encoding + disk write off the render thread.
+        std::thread::spawn(move || {
+            let dir = std::path::PathBuf::from("screenshots");
+            if let Err(e) = std::fs::create_dir_all(&dir) {
+                log::error!("[Renderer][finish_screenshot] Failed to create screenshots dir: {e}");
+                return;
+            }
+            let name = format!(
+                "screenshot_{}.png",
+                chrono::Local::now().format("%Y-%m-%d_%H-%M-%S")
+            );
+            let path = dir.join(name);
+            match image::save_buffer(&path, &pixels, width, height, image::ColorType::Rgba8) {
+                Ok(())  => debug_log!("Renderer", "finish_screenshot",
+                    "Screenshot saved to {}", path.display()),
+                Err(e) => log::error!(
+                    "[Renderer][finish_screenshot] Failed to save screenshot: {e}"),
+            }
+        });
     }
 
     // -----------------------------------------------------------------------

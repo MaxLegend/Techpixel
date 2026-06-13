@@ -19,7 +19,7 @@ use glam::{Mat4, Vec3};
 use std::path::PathBuf;
 use wgpu::util::DeviceExt;
 
-use crate::core::gameobjects::block::BlockDefinition;
+use crate::core::gameobjects::block::{BlockDefinition, BlockShape};
 use crate::debug_log;
 
 // ---------------------------------------------------------------------------
@@ -445,7 +445,8 @@ impl BlockPreviewRenderer {
         let tc = def.color_for_face(2);
         let bc = def.color_for_face(3);
         let sc = def.color_for_face(0); // sides
-        let (verts, _) = build_cube_vertices(
+        let (verts, _) = build_shape_preview_vertices(
+            def,
             [tc[0], tc[1], tc[2], 1.0],
             [bc[0], bc[1], bc[2], 0.85],  // slightly darker bottom
             [sc[0], sc[1], sc[2], 1.0],
@@ -619,7 +620,7 @@ impl BlockPreviewRenderer {
 // Geometry builder
 // =============================================================================
 
-/// Build cube vertex/index data.
+/// Build cube vertex/index data with explicit xyz bounds.
 /// `top_col`, `bot_col`, `side_col` are [f32;4] RGBA face tints.
 /// Returns (vertices, indices).
 ///
@@ -627,15 +628,18 @@ impl BlockPreviewRenderer {
 ///   Top:   [0..6]   → 1 face (4 verts)
 ///   Bot:   [6..12]  → 1 face (4 verts)
 ///   Sides: [12..36] → 4 faces (4 verts each)
-fn build_cube_vertices(
+#[allow(clippy::too_many_arguments)]
+fn build_cube_vertices_ex(
     top_col:  [f32; 4],
     bot_col:  [f32; 4],
     side_col: [f32; 4],
+    xl: f32, xh: f32,
+    yl: f32, yh: f32,
+    zl: f32, zh: f32,
 ) -> (Vec<CubeVertex>, Vec<u16>) {
-    let mut verts: Vec<CubeVertex>  = Vec::with_capacity(24);
-    let mut idxs:  Vec<u16>         = Vec::with_capacity(36);
+    let mut verts: Vec<CubeVertex> = Vec::with_capacity(24);
+    let mut idxs:  Vec<u16>        = Vec::with_capacity(36);
 
-    // Helper to push one quad (4 verts, CCW winding: 0-1-2, 0-2-3)
     let mut push_quad = |
         v: [[f32; 3]; 4],
         uvs: [[f32; 2]; 4],
@@ -651,49 +655,73 @@ fn build_cube_vertices(
         idxs.extend_from_slice(&[base, base+1, base+2, base, base+2, base+3]);
     };
 
-    // ---- Top face (+Y), vertices CCW when viewed from +Y (outside) ----
+    // Top face (+Y)
     push_quad(
-        [[-0.5, 0.5,  0.5], [ 0.5, 0.5,  0.5], [ 0.5, 0.5, -0.5], [-0.5, 0.5, -0.5]],
+        [[xl, yh, zh], [xh, yh, zh], [xh, yh, zl], [xl, yh, zl]],
         [[0.0,0.0],[1.0,0.0],[1.0,1.0],[0.0,1.0]],
         [0.0, 1.0, 0.0], top_col, &mut verts, &mut idxs,
     );
-
-    // ---- Bottom face (-Y), vertices CCW when viewed from -Y (outside) ----
+    // Bottom face (-Y)
     push_quad(
-        [[-0.5,-0.5, -0.5], [ 0.5,-0.5, -0.5], [ 0.5,-0.5,  0.5], [-0.5,-0.5,  0.5]],
+        [[xl, yl, zl], [xh, yl, zl], [xh, yl, zh], [xl, yl, zh]],
         [[0.0,0.0],[1.0,0.0],[1.0,1.0],[0.0,1.0]],
         [0.0,-1.0, 0.0], bot_col, &mut verts, &mut idxs,
     );
-
-    // ---- North face (-Z) ----
+    // North face (-Z)
     push_quad(
-        [[ 0.5,-0.5,-0.5], [-0.5,-0.5,-0.5], [-0.5, 0.5,-0.5], [ 0.5, 0.5,-0.5]],
+        [[xh, yl, zl], [xl, yl, zl], [xl, yh, zl], [xh, yh, zl]],
         [[0.0,1.0],[1.0,1.0],[1.0,0.0],[0.0,0.0]],
         [0.0, 0.0,-1.0], side_col, &mut verts, &mut idxs,
     );
-
-    // ---- South face (+Z) ----
+    // South face (+Z)
     push_quad(
-        [[-0.5,-0.5, 0.5], [ 0.5,-0.5, 0.5], [ 0.5, 0.5, 0.5], [-0.5, 0.5, 0.5]],
+        [[xl, yl, zh], [xh, yl, zh], [xh, yh, zh], [xl, yh, zh]],
         [[0.0,1.0],[1.0,1.0],[1.0,0.0],[0.0,0.0]],
         [0.0, 0.0, 1.0], side_col, &mut verts, &mut idxs,
     );
-
-    // ---- East face (+X) ----
+    // East face (+X)
     push_quad(
-        [[ 0.5,-0.5, 0.5], [ 0.5,-0.5,-0.5], [ 0.5, 0.5,-0.5], [ 0.5, 0.5, 0.5]],
+        [[xh, yl, zh], [xh, yl, zl], [xh, yh, zl], [xh, yh, zh]],
         [[0.0,1.0],[1.0,1.0],[1.0,0.0],[0.0,0.0]],
         [1.0, 0.0, 0.0], side_col, &mut verts, &mut idxs,
     );
-
-    // ---- West face (-X) ----
+    // West face (-X)
     push_quad(
-        [[-0.5,-0.5,-0.5], [-0.5,-0.5, 0.5], [-0.5, 0.5, 0.5], [-0.5, 0.5,-0.5]],
+        [[xl, yl, zl], [xl, yl, zh], [xl, yh, zh], [xl, yh, zl]],
         [[0.0,1.0],[1.0,1.0],[1.0,0.0],[0.0,0.0]],
         [-1.0, 0.0, 0.0], side_col, &mut verts, &mut idxs,
     );
 
     (verts, idxs)
+}
+
+/// Build a full unit cube centered at origin.
+fn build_cube_vertices(
+    top_col:  [f32; 4],
+    bot_col:  [f32; 4],
+    side_col: [f32; 4],
+) -> (Vec<CubeVertex>, Vec<u16>) {
+    build_cube_vertices_ex(top_col, bot_col, side_col, -0.5, 0.5, -0.5, 0.5, -0.5, 0.5)
+}
+
+/// Build geometry appropriate for `def.block_shape`:
+///   Slab       → bottom half-cube (y: -0.5 .. 0.0)
+///   Cross/Crop → very thin billboard (z: -0.05 .. 0.05) — shows as flat square
+///   Cube       → full unit cube
+fn build_shape_preview_vertices(
+    def:      &BlockDefinition,
+    top_col:  [f32; 4],
+    bot_col:  [f32; 4],
+    side_col: [f32; 4],
+) -> (Vec<CubeVertex>, Vec<u16>) {
+    match def.block_shape {
+        BlockShape::Slab =>
+            build_cube_vertices_ex(top_col, bot_col, side_col, -0.5, 0.5, -0.5, 0.0, -0.5, 0.5),
+        BlockShape::Cross | BlockShape::CropGrid =>
+            build_cube_vertices_ex(side_col, side_col, side_col, -0.5, 0.5, -0.5, 0.5, -0.05, 0.05),
+        _ =>
+            build_cube_vertices(top_col, bot_col, side_col),
+    }
 }
 
 // =============================================================================

@@ -9,7 +9,7 @@
 
 use crate::{ flow_debug_log};
 use crate::core::config;
-use crate::core::gameobjects::block::{BlockRegistry, remap_face_for_rotation};
+use crate::core::gameobjects::block::{BlockRegistry, BlockShape, remap_face_for_rotation};
 use crate::screens::game_3d_pipeline::{Vertex3D, snorm8, unorm8};
 use crate::core::gameobjects::texture_atlas::TextureAtlasLayout;
 
@@ -40,9 +40,9 @@ pub struct Chunk {
     /// Per-block rotation / facing direction (same indexing as `blocks`).
     /// 0 = default orientation. See `block::ROT_FACE_MAP` for encoding.
     pub(crate) rotations: Vec<u8>,
-    /// Fluid level per block (0.0..1.0). Only meaningful when block is a fluid.
-    /// Same indexing as `blocks`.
-    pub(crate) fluid_levels: Vec<f32>,
+    /// Discrete fluid level per block (0–8). Only meaningful when block is a fluid.
+    /// 0 = empty, 1–7 = flowing, 8 = source. Same indexing as `blocks`.
+    pub(crate) fluid_levels: Vec<u8>,
     pub mesh_dirty: bool,
     /// Per-XZ-column biome foliage tint (RGB multiplier). Index = bx * CSZ + bz.
     /// Applied to blocks with `biome_tint: true` (grass, leaves, etc.).
@@ -65,7 +65,7 @@ impl Chunk {
             cz,
             blocks: vec![0u8; vol],
             rotations: vec![0u8; vol],
-            fluid_levels: vec![0.0f32; vol],
+            fluid_levels: vec![0u8; vol],
             mesh_dirty: true,
             biome_foliage_colors: vec![[1.0f32; 3]; cols],
             biome_water_colors:   vec![[1.0f32; 3]; cols],
@@ -89,15 +89,16 @@ impl Chunk {
         self.blocks[flat_idx(x, y, z)] = block_id;
     }
 
-    /// Write a fluid block with level during terrain generation.
-    pub(crate) fn set_gen_fluid(&mut self, x: usize, y: usize, z: usize, block_id: u8, level: f32) {
+    /// Write a fluid block with discrete level during terrain generation.
+    /// Use `crate::core::fluid::FLUID_SOURCE_LEVEL` (= 8) for source blocks.
+    pub(crate) fn set_gen_fluid(&mut self, x: usize, y: usize, z: usize, block_id: u8, level: u8) {
         let idx = flat_idx(x, y, z);
         self.blocks[idx] = block_id;
         self.fluid_levels[idx] = level;
     }
 
     /// Legacy alias — kept for backward compatibility.
-    pub(crate) fn set_gen_water(&mut self, x: usize, y: usize, z: usize, block_id: u8, level: f32) {
+    pub(crate) fn set_gen_water(&mut self, x: usize, y: usize, z: usize, block_id: u8, level: u8) {
         self.set_gen_fluid(x, y, z, block_id, level);
     }
 
@@ -122,15 +123,21 @@ impl Chunk {
         self.rotations[flat_idx(x, y, z)]
     }
 
-    /// Get fluid level at local position.
+    /// Get discrete fluid level (0–8) at local position.
     #[inline]
-    pub fn get_fluid_level(&self, x: usize, y: usize, z: usize) -> f32 {
+    pub fn get_fluid_level(&self, x: usize, y: usize, z: usize) -> u8 {
         self.fluid_levels[flat_idx(x, y, z)]
+    }
+
+    /// Get fluid level as a normalized float (0.0–1.0) for rendering.
+    #[inline]
+    pub fn get_fluid_level_f32(&self, x: usize, y: usize, z: usize) -> f32 {
+        self.fluid_levels[flat_idx(x, y, z)] as f32 / 8.0
     }
 
     /// Legacy alias — kept for backward compatibility.
     #[inline]
-    pub fn get_water_level(&self, x: usize, y: usize, z: usize) -> f32 {
+    pub fn get_water_level(&self, x: usize, y: usize, z: usize) -> u8 {
         self.get_fluid_level(x, y, z)
     }
 
@@ -158,7 +165,7 @@ impl Chunk {
         get_neighbor: F,
     ) -> (Vec<Vertex3D>, Vec<u32>)
     where
-        F: Fn(i32, i32, i32) -> (u8, f32),
+        F: Fn(i32, i32, i32) -> (u8, u8),
     {
         let sx = csx();
         let sy = csy();
@@ -171,13 +178,12 @@ impl Chunk {
         let mut vertices: Vec<Vertex3D> = Vec::with_capacity(2048);
         let mut indices:  Vec<u32>      = Vec::with_capacity(3072);
 
-        // Maximum visual height for a source/full fluid block.
-        // Slightly below 1.0 to give a visible water surface gap.
-        const MAX_FLUID_VISUAL_LEVEL: f32 = 0.9;
+        // Maximum visual height for a source/full fluid block (level 8 maps to 0.875).
+        // Using 7/8 = 0.875 gives a visible surface gap even for sources.
+        const MAX_FLUID_VISUAL_LEVEL: f32 = 0.875;
 
-        // Unified neighbor lookup: in-chunk reads from self, cross-chunk via get_neighbor.
-        // Returns (block_id, fluid_level).
-        let get_nb = |nwx: i32, nwy: i32, nwz: i32| -> (u8, f32) {
+        // Unified neighbor lookup → (block_id, discrete_level).
+        let get_nb = |nwx: i32, nwy: i32, nwz: i32| -> (u8, u8) {
             let lx = nwx - wx_base;
             let ly = nwy - wy_base;
             let lz = nwz - wz_base;
@@ -200,8 +206,11 @@ impl Chunk {
                     // Skip non-fluid blocks
                     if !fluid_ids.contains(&block_id) { continue; }
 
-                    let level = self.fluid_levels[flat_idx(bx, by, bz)];
-                    if level < 0.005 { continue; }
+                    let level_u8 = self.fluid_levels[flat_idx(bx, by, bz)];
+                    if level_u8 == 0 { continue; }
+
+                    // Normalized level [0..1] for visual height calculations
+                    let level = (level_u8 as f32 / 8.0).min(MAX_FLUID_VISUAL_LEVEL);
 
                     let def = match registry.get(block_id) {
                         Some(d) => d,
@@ -228,7 +237,6 @@ impl Chunk {
                     let mat = &def.material;
 
                     // Depth-dependent alpha: deeper fluid is more opaque
-                    // level 1.0 = full → alpha 220, level 0.1 = shallow → alpha 100
                     let alpha = (100.0 + level * 120.0).min(230.0) as u8;
 
                     // Emission for luminous fluids (e.g. lava)
@@ -257,29 +265,20 @@ impl Chunk {
                     // A block is "submerged" (same fluid directly above it) → treat as
                     // MAX_FLUID_VISUAL_LEVEL so the surface connects to the column above.
                     // Air neighbours contribute 0 and are skipped in the average.
-                    //
-                    // Using the same formula for both the top face and the tops of side
-                    // faces guarantees that shared edges are at identical heights →
-                    // no seams/gaps between adjacent water blocks.
 
-                    // Effective visual level for the same-fluid block at world offset (dx, dz)
-                    // relative to the current block.  Returns 0.0 if that block is not this fluid.
                     let eff_level = |dx: i32, dz: i32| -> f32 {
                         if dx == 0 && dz == 0 {
-                            // Current block
                             if npy == block_id { MAX_FLUID_VISUAL_LEVEL }
-                            else { level.min(MAX_FLUID_VISUAL_LEVEL) }
+                            else { level }
                         } else {
                             let (bid, bl) = get_nb(wx + dx, wy, wz + dz);
                             if bid != block_id { return 0.0; }
                             let above = get_nb(wx + dx, wy + 1, wz + dz).0;
                             if above == block_id { MAX_FLUID_VISUAL_LEVEL }
-                            else { bl.min(MAX_FLUID_VISUAL_LEVEL) }
+                            else { (bl as f32 / 8.0).min(MAX_FLUID_VISUAL_LEVEL) }
                         }
                     };
 
-                    // corner_h(dx, dz): height at the corner in the (dx, dz) direction.
-                    // dx, dz ∈ {-1, +1}.  Averages the 4 blocks that share that corner.
                     let corner_h = |dx: i32, dz: i32| -> f32 {
                         let levels = [
                             eff_level( 0,  0),
@@ -292,7 +291,6 @@ impl Chunk {
                         for l in &levels {
                             if *l > 0.0 { total += l; count += 1; }
                         }
-                        // Minimum 1/16 so tiny streams still have a visible surface
                         if count > 0 { (total / count as f32).max(0.0625) } else { 0.0625 }
                     };
 
@@ -353,7 +351,7 @@ impl Chunk {
         get_neighbor: F,
     ) -> (Vec<Vertex3D>, Vec<u32>)
     where
-        F: Fn(i32, i32, i32) -> (u8, f32),
+        F: Fn(i32, i32, i32) -> (u8, u8),
     {
         self.build_fluid_mesh(registry, atlas, &[water_block_id], get_neighbor)
     }
@@ -409,12 +407,16 @@ impl Chunk {
             }
         };
 
-        // A neighbour hides this glass face if it is fully opaque OR the same
-        // glass id (avoid internal seams between identical glass blocks).
+        // A neighbour hides this face if it is the same block id (merge identical
+        // glass) OR a fully-opaque solid cube. Other alpha/cutout neighbours stay
+        // visible so you can see through to them.
         let face_hidden_by = |neighbour_id: u8, self_id: u8| -> bool {
             if neighbour_id == self_id { return true; }
             match registry.get(neighbour_id) {
-                Some(d) => d.solid && !d.transparent && d.model.is_none(),
+                Some(d) => d.solid
+                    && !d.renders_in_alpha_pass()
+                    && d.model.is_none()
+                    && matches!(d.block_shape, BlockShape::Cube),
                 None => false,
             }
         };
@@ -428,7 +430,7 @@ impl Chunk {
                         Some(d) => d,
                         None => continue,
                     };
-                    if !def.is_glass() { continue; }
+                    if !def.renders_in_alpha_pass() { continue; }
 
                     let ox = wx_base as f32 + bx as f32;
                     let oy = wy_base as f32 + by as f32;
@@ -446,9 +448,17 @@ impl Chunk {
                         [0.0; 4]
                     };
 
-                    // Vertex alpha = configured opacity, clamped so the surface
-                    // is always visible (otherwise fully clear glass disappears).
-                    let alpha = (def.glass.opacity.clamp(0.0, 1.0).max(0.1) * 255.0) as u8;
+                    // Vertex alpha feeds the shader as `out_alpha = texture.a × vertex_alpha`.
+                    // • Texture-transparent blocks (holes / per-texel glass) pass 255 so the
+                    //   opacity is taken entirely from the texture (opaque texels stay solid,
+                    //   clear texels become holes).
+                    // • Legacy uniform-opacity glass (no alpha in its texture) keeps its
+                    //   configured `glass.opacity`, clamped so it never fully vanishes.
+                    let alpha = if def.tex_has_alpha {
+                        255u8
+                    } else {
+                        (def.glass.opacity.clamp(0.0, 1.0).max(0.1) * 255.0) as u8
+                    };
 
                     let rot = self.get_rotation(bx, by, bz);
                     let tint_face = |world_face: u8| -> [f32; 3] {
@@ -480,6 +490,155 @@ impl Chunk {
                 }
             }
         }
+
+        (vertices, indices)
+    }
+
+    // -----------------------------------------------------------------------
+    // Foliage mesh builder — Cross and CropGrid shapes (double-sided quads)
+    // -----------------------------------------------------------------------
+
+    /// Build a mesh for all foliage blocks (Cross / CropGrid shapes) in this chunk.
+    ///
+    /// Cross    — two diagonal quads, each rendered double-sided.
+    /// CropGrid — four axis-aligned quads in a # pattern, each double-sided.
+    ///
+    /// Returns `(vertices, indices)` in the same `Vertex3D` format as other builders.
+    /// This mesh is rendered without backface culling (foliage is always two-sided).
+    pub fn build_foliage_mesh(
+        &self,
+        registry: &BlockRegistry,
+        atlas: &TextureAtlasLayout,
+    ) -> (Vec<Vertex3D>, Vec<u32>) {
+        let sx = csx();
+        let sy = csy();
+        let sz = csz();
+
+        let wx_base = self.cx * sx as i32;
+        let wy_base = self.cy * sy as i32;
+        let wz_base = self.cz * sz as i32;
+
+        let mut vertices: Vec<Vertex3D> = Vec::new();
+        let mut indices:  Vec<u32>      = Vec::new();
+
+        for bx in 0..sx {
+            for by in 0..sy {
+                for bz in 0..sz {
+                    let block_id = self.blocks[flat_idx(bx, by, bz)];
+                    if block_id == 0 { continue; }
+                    let def = match registry.get(block_id) {
+                        Some(d) => d,
+                        None => continue,
+                    };
+                    let is_cross     = def.block_shape == BlockShape::Cross;
+                    let is_cropgrid  = def.block_shape == BlockShape::CropGrid;
+                    if !is_cross && !is_cropgrid { continue; }
+
+                    let ox = wx_base as f32 + bx as f32;
+                    let oy = wy_base as f32 + by as f32;
+                    let oz = wz_base as f32 + bz as f32;
+
+                    let col_idx = bx * csz() + bz;
+                    let btint = if def.biome_tint {
+                        self.biome_foliage_colors[col_idx]
+                    } else {
+                        [1.0f32; 3]
+                    };
+                    let base_c = def.color_for_face(2); // use top face colour for all quads
+                    let color = [
+                        base_c[0] * btint[0],
+                        base_c[1] * btint[1],
+                        base_c[2] * btint[2],
+                    ];
+                    let uv = atlas.uv_for(def.texture_for_face(2).unwrap_or(""));
+                    let mat = &def.material;
+                    let material_data = [mat.roughness, mat.metalness];
+                    let emi = &def.emission;
+                    let emission_data = if emi.emit_light {
+                        [emi.light_color[0], emi.light_color[1], emi.light_color[2], -emi.light_intensity.abs()]
+                    } else {
+                        [0.0f32; 4]
+                    };
+
+                    if is_cross {
+                        // Quad A: NW→SE diagonal
+                        emit_foliage_quad(
+                            &mut vertices, &mut indices,
+                            [
+                                [ox+0.1464, oy,   oz+0.1464],
+                                [ox+0.8536, oy,   oz+0.8536],
+                                [ox+0.8536, oy+1.0, oz+0.8536],
+                                [ox+0.1464, oy+1.0, oz+0.1464],
+                            ],
+                            color, uv, material_data, emission_data,
+                        );
+                        // Quad B: NE→SW diagonal
+                        emit_foliage_quad(
+                            &mut vertices, &mut indices,
+                            [
+                                [ox+0.8536, oy,   oz+0.1464],
+                                [ox+0.1464, oy,   oz+0.8536],
+                                [ox+0.1464, oy+1.0, oz+0.8536],
+                                [ox+0.8536, oy+1.0, oz+0.1464],
+                            ],
+                            color, uv, material_data, emission_data,
+                        );
+                    } else {
+                        // CropGrid — four axis-aligned quads
+                        // X1: z = oz+0.333
+                        emit_foliage_quad(
+                            &mut vertices, &mut indices,
+                            [
+                                [ox,     oy,     oz+0.333],
+                                [ox+1.0, oy,     oz+0.333],
+                                [ox+1.0, oy+1.0, oz+0.333],
+                                [ox,     oy+1.0, oz+0.333],
+                            ],
+                            color, uv, material_data, emission_data,
+                        );
+                        // X2: z = oz+0.667
+                        emit_foliage_quad(
+                            &mut vertices, &mut indices,
+                            [
+                                [ox,     oy,     oz+0.667],
+                                [ox+1.0, oy,     oz+0.667],
+                                [ox+1.0, oy+1.0, oz+0.667],
+                                [ox,     oy+1.0, oz+0.667],
+                            ],
+                            color, uv, material_data, emission_data,
+                        );
+                        // Z1: x = ox+0.333
+                        emit_foliage_quad(
+                            &mut vertices, &mut indices,
+                            [
+                                [ox+0.333, oy,     oz    ],
+                                [ox+0.333, oy,     oz+1.0],
+                                [ox+0.333, oy+1.0, oz+1.0],
+                                [ox+0.333, oy+1.0, oz    ],
+                            ],
+                            color, uv, material_data, emission_data,
+                        );
+                        // Z2: x = ox+0.667
+                        emit_foliage_quad(
+                            &mut vertices, &mut indices,
+                            [
+                                [ox+0.667, oy,     oz    ],
+                                [ox+0.667, oy,     oz+1.0],
+                                [ox+0.667, oy+1.0, oz+1.0],
+                                [ox+0.667, oy+1.0, oz    ],
+                            ],
+                            color, uv, material_data, emission_data,
+                        );
+                    }
+                }
+            }
+        }
+
+        flow_debug_log!(
+            "Chunk", "build_foliage_mesh",
+            "Chunk ({},{},{}) => {} foliage verts, {} indices",
+            self.cx, self.cy, self.cz, vertices.len(), indices.len()
+        );
 
         (vertices, indices)
     }
@@ -561,9 +720,12 @@ impl Chunk {
                     if !def.solid { continue; }
                     // Skip blocks with custom 3D models — they are rendered as entities
                     if def.model.is_some() { continue; }
-                    // Skip transparent solid blocks (glass) — meshed separately
-                    // via build_transparent_mesh and rendered in the alpha-blend pass.
-                    if def.transparent { continue; }
+                    // Skip alpha-pass blocks (glass / texture-transparent, auto-detected)
+                    // — they are meshed via build_transparent_mesh.
+                    if def.renders_in_alpha_pass() { continue; }
+                    // Skip foliage (Cross/CropGrid) — meshed via build_foliage_mesh.
+                    // Skip Slab — meshed via build_slab_mesh.
+                    if matches!(def.block_shape, BlockShape::Cross | BlockShape::CropGrid | BlockShape::Slab) { continue; }
 
                     let ox = wx_base as f32 + bx0 as f32;
                     let oy = wy_base as f32 + by0 as f32;
@@ -705,7 +867,12 @@ impl Chunk {
     fn is_transparent(b: u8, water_block_id: u8, registry: &BlockRegistry) -> bool {
         if b == 0 { return true; }
         if water_block_id != 0 && b == water_block_id { return true; }
-        registry.get(b).map(|d| d.model.is_some() || d.transparent).unwrap_or(false)
+        registry.get(b).map(|d| {
+            d.model.is_some()
+                || d.transparent
+                || d.tex_has_alpha   // auto-detected texture transparency (holes / glass)
+                || matches!(d.block_shape, BlockShape::Cross | BlockShape::CropGrid)
+        }).unwrap_or(false)
     }
 
     /// Check if the positive-direction adjacent super-block is transparent (face culling).
@@ -798,11 +965,11 @@ impl Chunk {
 
     /// Serialise this chunk into a compact DTO for disk storage.
     pub fn to_save_data(&self) -> crate::core::save_system::SavedChunk {
-        let fluid_sparse: Vec<(u32, u32)> = self.fluid_levels
+        let fluid_sparse: Vec<(u32, u8)> = self.fluid_levels
             .iter()
             .enumerate()
-            .filter(|&(_, &v)| v > 0.0)
-            .map(|(i, &v)| (i as u32, v.to_bits()))
+            .filter(|(_, v)| **v > 0)
+            .map(|(i, &v)| (i as u32, v))
             .collect();
 
         crate::core::save_system::SavedChunk {
@@ -825,13 +992,126 @@ impl Chunk {
         if data.rotations.len() == vol {
             self.rotations.copy_from_slice(&data.rotations);
         }
-        for v in self.fluid_levels.iter_mut() { *v = 0.0; }
-        for &(idx, bits) in &data.fluid_sparse {
+        for v in self.fluid_levels.iter_mut() { *v = 0; }
+        for &(idx, level) in &data.fluid_sparse {
             if (idx as usize) < vol {
-                self.fluid_levels[idx as usize] = f32::from_bits(bits);
+                self.fluid_levels[idx as usize] = level;
             }
         }
         self.mesh_dirty = true;
+    }
+
+    // -----------------------------------------------------------------------
+    // Slab mesh builder — half-block (0.5 height) in any rotation
+    // -----------------------------------------------------------------------
+
+    /// Build a mesh for all Slab blocks in this chunk.
+    ///
+    /// A Slab is a solid half-block.  Rotation 0 = floor slab (bottom half),
+    /// rotation 5 = ceiling slab (top half).  Wall slabs use rotations 6–9.
+    /// Rendered in the opaque pass (same pipeline as cube blocks).
+    pub fn build_slab_mesh(
+        &self,
+        registry: &BlockRegistry,
+        atlas: &TextureAtlasLayout,
+    ) -> (Vec<Vertex3D>, Vec<u32>) {
+        let sx = csx();
+        let sy = csy();
+        let sz = csz();
+
+        let wx_base = self.cx * sx as i32;
+        let wy_base = self.cy * sy as i32;
+        let wz_base = self.cz * sz as i32;
+
+        let mut vertices: Vec<Vertex3D> = Vec::new();
+        let mut indices:  Vec<u32>      = Vec::new();
+
+        for bx in 0..sx {
+            for by in 0..sy {
+                for bz in 0..sz {
+                    let block_id = self.blocks[flat_idx(bx, by, bz)];
+                    if block_id == 0 { continue; }
+                    let def = match registry.get(block_id) {
+                        Some(d) => d,
+                        None => continue,
+                    };
+                    if def.block_shape != BlockShape::Slab { continue; }
+
+                    let ox = wx_base as f32 + bx as f32;
+                    let oy = wy_base as f32 + by as f32;
+                    let oz = wz_base as f32 + bz as f32;
+
+                    let rot = self.get_rotation(bx, by, bz);
+
+                    let mat = &def.material;
+                    let material_data = [mat.roughness, mat.metalness];
+                    let emi = &def.emission;
+                    let emission_data = if emi.emit_light {
+                        [emi.light_color[0], emi.light_color[1], emi.light_color[2], -emi.light_intensity.abs()]
+                    } else {
+                        [0.0f32; 4]
+                    };
+
+                    // Determine slab geometry based on rotation:
+                    //   rot 0 / 2 (floor slab): y 0..0.5
+                    //   rot 5     (ceil slab):  y 0.5..1
+                    //   rot 6 (wall N): z 0..0.5
+                    //   rot 7 (wall S): z 0.5..1
+                    //   rot 8 (wall E): x 0.5..1
+                    //   rot 9 (wall W): x 0..0.5
+                    let (y_lo, y_hi, z_lo, z_hi, x_lo, x_hi) = match rot {
+                        5            => (0.5, 1.0,  0.0, 1.0,  0.0, 1.0),
+                        6            => (0.0, 1.0,  0.0, 0.5,  0.0, 1.0),
+                        7            => (0.0, 1.0,  0.5, 1.0,  0.0, 1.0),
+                        8            => (0.0, 1.0,  0.0, 1.0,  0.5, 1.0),
+                        9            => (0.0, 1.0,  0.0, 1.0,  0.0, 0.5),
+                        _ /*0,1,2…*/ => (0.0, 0.5,  0.0, 1.0,  0.0, 1.0),
+                    };
+
+                    // Emit 6 faces of the slab cuboid.
+                    // Face directions: 0=+X, 1=-X, 2=+Y, 3=-Y, 4=+Z, 5=-Z
+                    for face_dir in 0u8..6 {
+                        let c = def.color_for_face(face_dir);
+                        let uv = atlas.uv_for(def.texture_for_face(face_dir).unwrap_or(""));
+                        emit_slab_face(
+                            &mut vertices, &mut indices,
+                            ox, oy, oz,
+                            face_dir,
+                            x_lo, x_hi, y_lo, y_hi, z_lo, z_hi,
+                            c, uv, material_data, emission_data,
+                        );
+                    }
+                }
+            }
+        }
+
+        flow_debug_log!(
+            "Chunk", "build_slab_mesh",
+            "Chunk ({},{},{}) => {} slab verts, {} indices",
+            self.cx, self.cy, self.cz, vertices.len(), indices.len()
+        );
+
+        (vertices, indices)
+    }
+
+    /// Returns the collision AABB (world-relative, in block-local [0,1] space)
+    /// for a block given its shape and rotation.
+    /// Used by the physics system to build partial compound shapes for Slabs.
+    pub fn collision_aabb_for(shape: &BlockShape, rotation: u8) -> Option<([f32; 3], [f32; 3])> {
+        match shape {
+            BlockShape::Slab => {
+                let (y_lo, y_hi, z_lo, z_hi, x_lo, x_hi) = match rotation {
+                    5            => (0.5f32, 1.0, 0.0, 1.0, 0.0, 1.0),
+                    6            => (0.0, 1.0, 0.0, 0.5, 0.0, 1.0),
+                    7            => (0.0, 1.0, 0.5, 1.0, 0.0, 1.0),
+                    8            => (0.0, 1.0, 0.0, 1.0, 0.5, 1.0),
+                    9            => (0.0, 1.0, 0.0, 1.0, 0.0, 0.5),
+                    _            => (0.0, 0.5, 0.0, 1.0, 0.0, 1.0),
+                };
+                Some(([x_lo, y_lo, z_lo], [x_hi, y_hi, z_hi]))
+            }
+            _ => None,
+        }
     }
 }
 
@@ -993,7 +1273,10 @@ fn emit_face_lod_with_alpha(
             texcoord:  uvs[i],
             material:  [unorm8(material[0]), unorm8(material[1]), 0, 0],
             emission,
-            tangent:   [snorm8(tangent[0]), snorm8(tangent[1]), snorm8(tangent[2]), 0],
+            // tangent.w = 1 flags this vertex for the alpha-tested/blended path:
+            // the fragment shader derives final opacity from texture.a × color_ao.w
+            // (the per-block glass opacity). Opaque faces leave tangent.w = 0.
+            tangent:   [snorm8(tangent[0]), snorm8(tangent[1]), snorm8(tangent[2]), snorm8(1.0)],
         });
     }
     idxs.extend_from_slice(&[base, base+1, base+2, base, base+2, base+3]);
@@ -1094,6 +1377,109 @@ fn emit_water_face(
             position:  corners[i],
             normal:    [snorm8(normal[0]), snorm8(normal[1]), snorm8(normal[2]), 0],
             color_ao:  [unorm8(color[0]),  unorm8(color[1]),  unorm8(color[2]),  alpha],
+            texcoord:  uvs[i],
+            material:  [unorm8(material[0]), unorm8(material[1]), 0, 0],
+            emission,
+            tangent:   [snorm8(tangent[0]), snorm8(tangent[1]), snorm8(tangent[2]), 0],
+        });
+    }
+    idxs.extend_from_slice(&[base, base+1, base+2, base, base+2, base+3]);
+}
+
+// ---------------------------------------------------------------------------
+// emit_foliage_quad — emits one double-sided quad for foliage (Cross/CropGrid)
+// ---------------------------------------------------------------------------
+fn emit_foliage_quad(
+    verts:    &mut Vec<Vertex3D>,
+    idxs:     &mut Vec<u32>,
+    corners:  [[f32; 3]; 4],
+    color:    [f32; 3],
+    uv:       (f32, f32, f32, f32),
+    material: [f32; 2],
+    emission: [f32; 4],
+) {
+    let base = verts.len() as u32;
+
+    let e1 = [corners[1][0]-corners[0][0], corners[1][1]-corners[0][1], corners[1][2]-corners[0][2]];
+    let e2 = [corners[3][0]-corners[0][0], corners[3][1]-corners[0][1], corners[3][2]-corners[0][2]];
+    let nx = e1[1]*e2[2] - e1[2]*e2[1];
+    let ny = e1[2]*e2[0] - e1[0]*e2[2];
+    let nz = e1[0]*e2[1] - e1[1]*e2[0];
+    let nlen = (nx*nx + ny*ny + nz*nz).sqrt().max(1e-6);
+    let normal = [nx/nlen, ny/nlen, nz/nlen];
+    let e1n = [e1[0]/nlen, e1[1]/nlen, e1[2]/nlen];
+
+    let (u0, v0, u1, v1) = uv;
+    let uvs: [[f32; 2]; 4] = [
+        [u0, v1], [u1, v1], [u1, v0], [u0, v0],
+    ];
+
+    for i in 0..4 {
+        verts.push(Vertex3D {
+            position:  corners[i],
+            normal:    [snorm8(normal[0]), snorm8(normal[1]), snorm8(normal[2]), 0],
+            color_ao:  [unorm8(color[0]),  unorm8(color[1]),  unorm8(color[2]),  255],
+            texcoord:  uvs[i],
+            material:  [unorm8(material[0]), unorm8(material[1]), 0, 0],
+            emission,
+            tangent:   [snorm8(e1n[0]), snorm8(e1n[1]), snorm8(e1n[2]), 0],
+        });
+    }
+    // Front face (CCW) + back face (CW) for double-sided rendering
+    idxs.extend_from_slice(&[base, base+1, base+2, base, base+2, base+3]);
+    idxs.extend_from_slice(&[base, base+2, base+1, base, base+3, base+2]);
+}
+
+// ---------------------------------------------------------------------------
+// emit_slab_face — emits one face of a slab cuboid
+// dir: 0=+X, 1=-X, 2=+Y, 3=-Y, 4=+Z, 5=-Z
+// ---------------------------------------------------------------------------
+fn emit_slab_face(
+    verts:    &mut Vec<Vertex3D>,
+    idxs:     &mut Vec<u32>,
+    ox: f32, oy: f32, oz: f32,
+    dir:      u8,
+    x_lo: f32, x_hi: f32,
+    y_lo: f32, y_hi: f32,
+    z_lo: f32, z_hi: f32,
+    color:    [f32; 3],
+    uv:       (f32, f32, f32, f32),
+    material: [f32; 2],
+    emission: [f32; 4],
+) {
+    let base = verts.len() as u32;
+
+    let (x0, x1) = (ox + x_lo, ox + x_hi);
+    let (y0, y1) = (oy + y_lo, oy + y_hi);
+    let (z0, z1) = (oz + z_lo, oz + z_hi);
+
+    let (normal, corners): ([f32; 3], [[f32; 3]; 4]) = match dir {
+        0 => ([1.0, 0.0, 0.0],  [[x1,y0,z1],[x1,y0,z0],[x1,y1,z0],[x1,y1,z1]]),
+        1 => ([-1.0, 0.0, 0.0], [[x0,y0,z0],[x0,y0,z1],[x0,y1,z1],[x0,y1,z0]]),
+        2 => ([0.0, 1.0, 0.0],  [[x0,y1,z1],[x1,y1,z1],[x1,y1,z0],[x0,y1,z0]]),
+        3 => ([0.0,-1.0, 0.0],  [[x0,y0,z0],[x1,y0,z0],[x1,y0,z1],[x0,y0,z1]]),
+        4 => ([0.0, 0.0, 1.0],  [[x0,y0,z1],[x1,y0,z1],[x1,y1,z1],[x0,y1,z1]]),
+        _ => ([0.0, 0.0,-1.0],  [[x1,y0,z0],[x0,y0,z0],[x0,y1,z0],[x1,y1,z0]]),
+    };
+    let tangent: [f32; 3] = match dir {
+        0 => [0.0, 0.0,-1.0], 1 => [0.0, 0.0, 1.0],
+        2 => [1.0, 0.0, 0.0], 3 => [1.0, 0.0, 0.0],
+        4 => [1.0, 0.0, 0.0], _ => [-1.0, 0.0, 0.0],
+    };
+    let (u0, v0, u1, v1) = uv;
+    let uvs: [[f32; 2]; 4] = match dir {
+        2 => [[u0,v1],[u1,v1],[u1,v0],[u0,v0]],
+        3 => [[u0,v0],[u1,v0],[u1,v1],[u0,v1]],
+        4 => [[u1,v1],[u0,v1],[u0,v0],[u1,v0]],
+        5 => [[u1,v1],[u0,v1],[u0,v0],[u1,v0]],
+        _ => [[u0,v1],[u1,v1],[u1,v0],[u0,v0]],
+    };
+
+    for i in 0..4 {
+        verts.push(Vertex3D {
+            position:  corners[i],
+            normal:    [snorm8(normal[0]), snorm8(normal[1]), snorm8(normal[2]), 0],
+            color_ao:  [unorm8(color[0]),  unorm8(color[1]),  unorm8(color[2]),  255],
             texcoord:  uvs[i],
             material:  [unorm8(material[0]), unorm8(material[1]), 0, 0],
             emission,

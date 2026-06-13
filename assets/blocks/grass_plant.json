@@ -1,0 +1,14 @@
+{
+  "id": "grass_plant",
+  "display_name": "Grass Plant",
+  "color": [0.3, 0.7, 0.2],
+  "solid": false,
+  "transparent": true,
+  "biome_tint": true,
+  "block_shape": "cross",
+  "placement_mode": "fixed",
+  "inventory_tab": "Nature",
+  "faces": {
+    "all": { "texture": "grass_plant" }
+  }
+}

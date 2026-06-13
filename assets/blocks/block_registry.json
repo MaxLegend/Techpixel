@@ -75,7 +75,10 @@
     "wood/oak_leaves",
     "glass",
     "glass_red",
-    "test_block"
+    "test_block",
+    "grass_plant",
+    "wheat",
+    "stone_slab"
   ],
   "description": "QubePixel Block Registry — add a new block by: 1) adding its ID here, 2) creating <id>.json next to this file",
   "format_version": 1

@@ -414,11 +414,13 @@ fn default_glass_opacity() -> f32 { 0.15 }
 
 /// Properties for fluid blocks (water, lava, oil, etc.).
 ///
-/// When present on a [`BlockDefinition`], the block is treated as a fluid
-/// by the simulation and rendering systems.
+/// Uses a discrete level system (0–8) inspired by the flowing_fluids mod:
+///   - Level 0  = no fluid (air)
+///   - Level 1–7 = flowing fluid at various fill heights
+///   - Level 8  = source block (permanent, infinite supply)
 ///
-/// Fluid levels (0.0..1.0) are stored per-voxel in `Chunk::fluid_levels`.
-/// Level 1.0 = full source block (never depletes), < 1.0 = flowing.
+/// Per horizontal spread step the level decreases by `level_decrease`.
+/// Water (decrease=1) can spread 7 blocks; lava (decrease=2) — 3 blocks.
 ///
 /// # Adding a new fluid
 /// ```text
@@ -428,27 +430,28 @@ fn default_glass_opacity() -> f32 { 0.15 }
 /// ```
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FluidProperties {
-    /// Horizontal flow rate (0.0..1.0). Higher = faster horizontal spread.
-    /// Water: 0.25, Lava: 0.05
-    #[serde(default = "default_fluid_flow_rate")]
-    pub flow_rate: f32,
+    /// How many levels are lost per horizontal spread step.
+    /// Water: 1 (spreads 7 blocks), Lava: 2 (spreads 3 blocks).
+    #[serde(default = "default_fluid_level_decrease")]
+    pub level_decrease: u8,
 
-    /// Downward flow rate multiplier (0.0..1.0). 1.0 = instant gravity.
-    /// Water: 1.0, Lava: 0.6
-    #[serde(default = "default_fluid_gravity_rate")]
-    pub gravity_rate: f32,
+    /// Simulation tick delay in frames between updates.
+    /// Water: 5, Lava: 20.
+    #[serde(default = "default_fluid_tick_delay")]
+    pub tick_delay: u32,
 
-    /// Maximum horizontal spread distance from source in blocks (0 = infinite).
-    /// Water: 7, Lava: 3
-    #[serde(default = "default_fluid_spread_distance")]
-    pub spread_distance: u8,
+    /// How far (in blocks) to search horizontally for a downward slope
+    /// before allowing horizontal spread on flat terrain.
+    /// Water: 4, Lava: 4.
+    #[serde(default = "default_fluid_slope_find_distance")]
+    pub slope_find_distance: u8,
 
     /// Fog colour when camera is submerged in this fluid (RGB, 0..1).
     #[serde(default = "default_fluid_fog_color")]
     pub fog_color: [f32; 3],
 
     /// Fog density when camera is submerged (higher = thicker fog).
-    /// Water: 0.04, Lava: 0.2
+    /// Water: 0.04, Lava: 0.2.
     #[serde(default = "default_fluid_fog_density")]
     pub fog_density: f32,
 }
@@ -456,24 +459,40 @@ pub struct FluidProperties {
 impl Default for FluidProperties {
     fn default() -> Self {
         Self {
-            flow_rate:       default_fluid_flow_rate(),
-            gravity_rate:    default_fluid_gravity_rate(),
-            spread_distance: default_fluid_spread_distance(),
-            fog_color:       default_fluid_fog_color(),
-            fog_density:     default_fluid_fog_density(),
+            level_decrease:      default_fluid_level_decrease(),
+            tick_delay:          default_fluid_tick_delay(),
+            slope_find_distance: default_fluid_slope_find_distance(),
+            fog_color:           default_fluid_fog_color(),
+            fog_density:         default_fluid_fog_density(),
         }
     }
 }
 
-fn default_fluid_flow_rate()       -> f32      { 0.25 }
-fn default_fluid_gravity_rate()    -> f32      { 1.0 }
-fn default_fluid_spread_distance() -> u8       { 7 }
-fn default_fluid_fog_color()       -> [f32; 3] { [0.1, 0.3, 0.6] }
-fn default_fluid_fog_density()     -> f32      { 0.04 }
+fn default_fluid_level_decrease()      -> u8       { 1 }
+fn default_fluid_tick_delay()          -> u32      { 5 }
+fn default_fluid_slope_find_distance() -> u8       { 4 }
+fn default_fluid_fog_color()           -> [f32; 3] { [0.1, 0.3, 0.6] }
+fn default_fluid_fog_density()         -> f32      { 0.04 }
 
 // ---------------------------------------------------------------------------
 // PlacementMode — how a block orients itself when placed by the player
 // ---------------------------------------------------------------------------
+
+/// The geometric shape used when building this block's chunk mesh.
+///
+/// `Cube` (default) — standard full 1×1×1 voxel.
+/// `Cross`    — two diagonal quads (grass plants, flowers).
+/// `CropGrid` — four axis-aligned quads in a # pattern (wheat, crops).
+/// `Slab`     — half-block (0.5 thickness); orientation set by `placement_mode`/rotation.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum BlockShape {
+    #[default]
+    Cube,
+    Cross,
+    CropGrid,
+    Slab,
+}
 
 /// Determines how this block rotates when placed by the player.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
@@ -630,6 +649,11 @@ pub struct BlockDefinition {
     #[serde(default)]
     pub biome_tint: bool,
 
+    /// Geometric mesh shape used when building chunk geometry.
+    /// `Cube` (default) preserves current behaviour.
+    #[serde(default)]
+    pub block_shape: BlockShape,
+
     /// How this block should be oriented when placed by the player.
     #[serde(default)]
     pub placement_mode: PlacementMode,
@@ -683,6 +707,13 @@ pub struct BlockDefinition {
     /// Each entry: [x_min, x_max, y_min, y_max, z_min, z_max] in block-canonical [0,1]^3 space.
     #[serde(skip)]
     pub model_shadow_cubes: Option<Vec<[f32; 6]>>,
+
+    /// Auto-detected at load: `true` when any resolved face texture contains a
+    /// non-opaque texel (a hole or a semi-transparent pixel). Lets the engine route
+    /// the block to the transparent render pass purely from its texture, instead of
+    /// the hand-set `transparent` JSON flag. Set by `BlockRegistry::classify_texture_alpha`.
+    #[serde(skip)]
+    pub tex_has_alpha: bool,
 }
 
 fn default_true() -> bool { true }
@@ -742,10 +773,17 @@ impl BlockDefinition {
 
     /// Returns a short label describing the block model type.
     pub fn model_type_label(&self) -> &'static str {
-        match &self.model {
-            None => "Default Cube",
-            Some(path) if path.contains(".geo.") => "Bedrock Geometry",
-            Some(_) => "Java Edition",
+        if self.model.is_some() {
+            return match self.model.as_deref() {
+                Some(p) if p.contains(".geo.") => "Bedrock Geometry",
+                _ => "Java Edition",
+            };
+        }
+        match self.block_shape {
+            BlockShape::Cube     => "Default Cube",
+            BlockShape::Cross    => "Cross (foliage)",
+            BlockShape::CropGrid => "CropGrid (foliage)",
+            BlockShape::Slab     => "Slab",
         }
     }
 
@@ -759,9 +797,24 @@ impl BlockDefinition {
 
     /// Returns true if this block is a transparent solid (glass-like).
     /// Excludes fluids and air; these need to be `solid && transparent`.
+    /// Consulted by the VCT/GI tint path (kept JSON-driven so opaque holed blocks
+    /// still cast solid shadows). Render-pass routing uses `renders_in_alpha_pass`.
     #[inline]
     pub fn is_glass(&self) -> bool {
         self.solid && self.transparent && !self.is_fluid() && self.model.is_none()
+    }
+
+    /// True when the block is drawn in the alpha (transparent) render pass.
+    /// Decided automatically from the texture (`tex_has_alpha`) OR the legacy
+    /// `transparent` JSON flag. Fluids, custom models, foliage and slabs have their
+    /// own passes and are excluded so they are not meshed twice.
+    #[inline]
+    pub fn renders_in_alpha_pass(&self) -> bool {
+        self.solid
+            && (self.tex_has_alpha || self.transparent)
+            && !self.is_fluid()
+            && self.model.is_none()
+            && !matches!(self.block_shape, BlockShape::Cross | BlockShape::CropGrid | BlockShape::Slab)
     }
 }
 
@@ -787,6 +840,9 @@ struct BlockRegistryFile {
 pub struct BlockRegistry {
     definitions: Vec<BlockDefinition>,
     id_to_index: HashMap<String, u8>,
+    /// Incremented whenever model-shadow data changes; lets GPU-side caches
+    /// (VCT model-shadow buffers) skip rebuilds when nothing changed.
+    model_shadow_version: u64,
 }
 
 /// Default relative path to the block assets directory.
@@ -890,12 +946,46 @@ impl BlockRegistry {
         if block_id == 0 { return; }
         if let Some(def) = self.definitions.get_mut((block_id - 1) as usize) {
             def.model_shadow_cubes = Some(cubes);
+            self.model_shadow_version += 1;
         }
+    }
+
+    /// Current model-shadow data version (bumped by `set_model_shadow_cubes`).
+    pub fn model_shadow_version(&self) -> u64 {
+        self.model_shadow_version
     }
 
     /// Returns the per-cube shadow AABBs if available.
     pub fn model_shadow_cubes(&self, block_id: u8) -> Option<&[[f32; 6]]> {
         self.get(block_id).and_then(|d| d.model_shadow_cubes.as_deref())
+    }
+
+    // -----------------------------------------------------------------------
+    // Texture-driven transparency classification
+    // -----------------------------------------------------------------------
+
+    /// Auto-classify each block's transparency from its resolved face textures.
+    /// For every block, if any face texture has a non-opaque texel, `tex_has_alpha`
+    /// is set so the block is routed to the transparent render pass without needing
+    /// a JSON `transparent` flag. The caller supplies `texture_has_alpha(name)` (which
+    /// inspects the atlas) so this module keeps no dependency on `TextureAtlas`.
+    /// Run AFTER `bake_layered_textures` so resolved (baked) face keys exist.
+    pub fn classify_texture_alpha<F>(&mut self, mut texture_has_alpha: F)
+    where
+        F: FnMut(&str) -> bool,
+    {
+        let mut count = 0usize;
+        for def in &mut self.definitions {
+            let has = (0u8..6).any(|f| {
+                def.texture_for_face(f).map_or(false, |name| texture_has_alpha(name))
+            });
+            def.tex_has_alpha = has;
+            if has { count += 1; }
+        }
+        debug_log!(
+            "BlockRegistry", "classify_texture_alpha",
+            "{} block(s) auto-classified as texture-transparent (alpha pass)", count
+        );
     }
 
     // -----------------------------------------------------------------------
@@ -1032,7 +1122,6 @@ impl BlockRegistry {
             // Air / transparent blocks: fully transparent
             return Some((0.0, 0.0, 0.0, 0.0));
         }
-        let opacity = 1000.0;
         let (er, eg, eb) = if def.emission.emit_light {
             (
                 def.emission.light_color[0] * def.emission.light_intensity,
@@ -1042,7 +1131,12 @@ impl BlockRegistry {
         } else {
             (0.0, 0.0, 0.0)
         };
-        Some((opacity, er, eg, eb))
+        // Slab only occupies half the voxel — treat as transparent in VCT so GI and
+        // sun shadows can propagate through the unoccupied half of the block cell.
+        if matches!(def.block_shape, BlockShape::Slab) {
+            return Some((0.0, er, eg, eb));
+        }
+        Some((1000.0, er, eg, eb))
     }
 
     /// Number of block types that emit light.
@@ -1228,7 +1322,7 @@ impl BlockRegistry {
             definitions.len()
         );
 
-        Ok(Self { definitions, id_to_index })
+        Ok(Self { definitions, id_to_index, model_shadow_version: 0 })
     }
 
     fn name_to_color(name: &str) -> [f32; 3] {
@@ -1305,6 +1399,7 @@ impl BlockRegistry {
                     volumetric: VolumetricProperties::default(),
                     faces: FaceColors::default(),
                     biome_tint: false,
+                    block_shape: BlockShape::Cube,
                     placement_mode: PlacementMode::Fixed,
                     default_rotation: 0,
                     model: None,
@@ -1312,6 +1407,7 @@ impl BlockRegistry {
                     model_shadow_cubes: None,
                     inventory_tab: None,
                     light_sources: Vec::new(),
+                    tex_has_alpha: false,
                 };
 
                 debug_log!(
@@ -1338,6 +1434,6 @@ impl BlockRegistry {
             definitions.len()
         );
 
-        Self { definitions, id_to_index }
+        Self { definitions, id_to_index, model_shadow_version: 0 }
     }
 }

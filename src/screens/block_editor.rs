@@ -189,6 +189,7 @@ impl BlockEditor {
             volumetric:   VolumetricProperties::default(),
             faces:        FaceColors::default(),
             biome_tint:   false,
+            block_shape:      crate::core::gameobjects::block::BlockShape::Cube,
             placement_mode:   PlacementMode::Fixed,
             default_rotation: 0,
             model:            None,
@@ -196,6 +197,7 @@ impl BlockEditor {
             model_shadow_cubes: None,
             inventory_tab:    None,
             light_sources:    Vec::new(),
+            tex_has_alpha:    false,
         }
     }
 
@@ -1218,16 +1220,24 @@ impl BlockEditor {
         if let Some(ref mut fp) = self.edit_def.fluid {
             ui.add_space(8.0);
 
-            labeled_field(ui, "Flow Rate (0..1)", "Horizontal spread speed. Water = 0.25, Lava = 0.05.");
-            if ui.add(egui::Slider::new(&mut fp.flow_rate, 0.0_f32..=1.0).text("flow_rate")).changed() { self.dirty = true; }
+            labeled_field(ui, "Level Decrease (per step)", "Levels lost per horizontal spread step. Water = 1 (7 blocks), Lava = 2 (3 blocks).");
+            let mut ld = fp.level_decrease as i32;
+            if ui.add(egui::Slider::new(&mut ld, 1..=7).text("level_decrease")).changed() {
+                fp.level_decrease = ld as u8;
+                self.dirty = true;
+            }
 
-            labeled_field(ui, "Gravity Rate (0..1)", "Downward flow speed. 1.0 = instant gravity fall. Lava ≈ 0.6.");
-            if ui.add(egui::Slider::new(&mut fp.gravity_rate, 0.0_f32..=1.0).text("gravity_rate")).changed() { self.dirty = true; }
+            labeled_field(ui, "Tick Delay (frames)", "Frames between simulation updates. Water = 5, Lava = 20.");
+            let mut td = fp.tick_delay as i32;
+            if ui.add(egui::Slider::new(&mut td, 1..=60).text("tick_delay")).changed() {
+                fp.tick_delay = td as u32;
+                self.dirty = true;
+            }
 
-            labeled_field(ui, "Spread Distance (blocks)", "Max horizontal spread from source (0 = infinite). Water = 7, Lava = 3.");
-            let mut sd = fp.spread_distance as i32;
-            if ui.add(egui::Slider::new(&mut sd, 0..=32).text("spread_distance")).changed() {
-                fp.spread_distance = sd as u8;
+            labeled_field(ui, "Slope Find Distance (blocks)", "How far to search for a downward path before spreading horizontally. Water = Lava = 4.");
+            let mut sfd = fp.slope_find_distance as i32;
+            if ui.add(egui::Slider::new(&mut sfd, 0..=8).text("slope_find_distance")).changed() {
+                fp.slope_find_distance = sfd as u8;
                 self.dirty = true;
             }
 

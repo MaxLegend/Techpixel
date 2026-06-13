@@ -13,10 +13,10 @@
 //   2. dispatch_gi()     — runs inject + N propagation iterations
 //   3. bind_group()      — returns the group(1) bind group for the render pass
 
-use crate::core::vct::voxel_volume::{VOLUME_SIZE, VoxelSnapshot, pack_volume};
+use crate::core::vct::voxel_volume::{VOLUME_SIZE, VoxelSnapshot, pack_volume, vol_idx, build_volume_luts};
 use crate::core::vct::dynamic_lights::{PointLightGPU, SpotLightGPU, EntityShadowAABB};
 use crate::core::gameobjects::block::BlockRegistry;
-use crate::debug_log;
+use crate::{debug_log, flow_debug_log};
 
 /// Maximum number of entity AABBs cast into the shadow ray test (e.g. player, mobs).
 const MAX_ENTITY_AABBS: usize = 32;
@@ -30,6 +30,12 @@ const MAX_ENTITY_AABBS: usize = 32;
 ///   Mode 3 = RGB32  — 32 steps  (~32 block radius, full colour)
 ///   Mode 4 = Full   — 64 steps  (~64 block radius, full colour)
 const PROPAGATION_STEPS_BY_MODE: [u32; 5] = [0, 16, 32, 32, 64];
+
+/// Propagation steps dispatched per frame (must be EVEN so the A↔B ping-pong
+/// always ends on `radiance_a`, the texture the fragment shader samples).
+/// Amortises the up-to-64-step convergence across several frames so that a single
+/// voxel edit / volume re-upload no longer stalls one frame with ~65 compute passes.
+const PROPAGATION_STEPS_PER_FRAME: u32 = 8;
 
 /// Light decay per propagation step (0..1). Higher = light travels farther.
 /// With max-based propagation: 0.97 → after 64 steps = 14% initial brightness.
@@ -131,6 +137,20 @@ pub struct VCTSystem {
     volume_uploaded: bool,
     /// Tracks last applied GI mode so uniform buffers are only rewritten on change.
     last_gi_mode: u32,
+    /// Set when the voxel volume (or GI mode) changed since the last propagation.
+    /// Propagation re-runs from inject each time, so when inputs are unchanged the
+    /// converged radiance in `radiance_a` is already exact — dispatch is skipped.
+    radiance_dirty: bool,
+    /// Propagation steps already dispatched for the current radiance solve.
+    /// Reset to 0 on each re-inject, then advanced by PROPAGATION_STEPS_PER_FRAME
+    /// until it reaches the active GI mode's total step count (amortised solve).
+    propagation_cursor: u32,
+    /// World-space origin of the volume currently resident in the GPU textures.
+    /// A reported dirty-region can be patched in place only while this matches the
+    /// new snapshot's origin; otherwise the camera moved and a full upload is needed.
+    last_uploaded_origin: [i32; 3],
+    /// Hash of the last uploaded model-shadow data; skips redundant rebuilds.
+    model_shadow_version: u64,
 }
 
 impl VCTSystem {
@@ -639,6 +659,10 @@ impl VCTSystem {
             volume_origin: [0.0; 3],
             volume_uploaded: false,
             last_gi_mode: u32::MAX, // force UB write on first dispatch
+            radiance_dirty: false,
+            propagation_cursor: 0,
+            last_uploaded_origin: [i32::MAX; 3], // force first upload through the full path
+            model_shadow_version: u64::MAX, // force first upload
         }
     }
 
@@ -652,6 +676,17 @@ impl VCTSystem {
         snapshot: &VoxelSnapshot,
         registry: &BlockRegistry,
     ) {
+        // Incremental fast path: when the only change since the resident upload was a
+        // small player edit (a reported world-space dirty box) and the volume origin
+        // is unchanged, patch just that sub-box instead of re-streaming the whole
+        // 128³ (3×8 MiB) volume + re-packing 2M voxels.
+        if let Some((wmin, wmax)) = snapshot.dirty_region {
+            if snapshot.origin == self.last_uploaded_origin {
+                self.upload_region(queue, snapshot, registry, wmin, wmax);
+                return;
+            }
+        }
+
         let (data_pixels, emission_pixels, tint_pixels) = pack_volume(snapshot, registry);
 
         self.volume_origin = [
@@ -719,6 +754,102 @@ impl VCTSystem {
         );
 
         self.volume_uploaded = true;
+        self.radiance_dirty  = true;
+        self.last_uploaded_origin = snapshot.origin;
+    }
+
+    // -----------------------------------------------------------------------
+    // Incremental sub-box upload (patch only the voxels a player edit touched)
+    // -----------------------------------------------------------------------
+
+    /// Patch only a sub-box of the resident voxel volume. Caller guarantees the
+    /// snapshot origin matches `last_uploaded_origin`, so volume-local coordinates
+    /// line up with the GPU textures. `wmin`/`wmax` are an inclusive world-space AABB.
+    fn upload_region(
+        &mut self,
+        queue: &wgpu::Queue,
+        snapshot: &VoxelSnapshot,
+        registry: &BlockRegistry,
+        wmin: [i32; 3],
+        wmax: [i32; 3],
+    ) {
+        let origin = snapshot.origin;
+        let sz = VOLUME_SIZE as i32;
+
+        // Reject boxes that fall entirely outside the volume (nothing to patch).
+        if wmax[0] < origin[0] || wmin[0] >= origin[0] + sz
+            || wmax[1] < origin[1] || wmin[1] >= origin[1] + sz
+            || wmax[2] < origin[2] || wmin[2] >= origin[2] + sz
+        {
+            return;
+        }
+
+        // World AABB → volume-local, clamped to [0, VOLUME_SIZE).
+        let lx0 = (wmin[0] - origin[0]).clamp(0, sz - 1);
+        let ly0 = (wmin[1] - origin[1]).clamp(0, sz - 1);
+        let lz0 = (wmin[2] - origin[2]).clamp(0, sz - 1);
+        let lx1 = (wmax[0] - origin[0]).clamp(0, sz - 1);
+        let ly1 = (wmax[1] - origin[1]).clamp(0, sz - 1);
+        let lz1 = (wmax[2] - origin[2]).clamp(0, sz - 1);
+
+        let w = (lx1 - lx0 + 1) as u32;
+        let h = (ly1 - ly0 + 1) as u32;
+        let d = (lz1 - lz0 + 1) as u32;
+        let count = (w * h * d) as usize;
+
+        // Pack just the sub-box densely (row-major X→Y→Z, matching write_texture).
+        let (lut_data, lut_emission, lut_tint) = build_volume_luts(registry);
+        let mut data     = vec![[0u8; 4]; count];
+        let mut emission = vec![[0u8; 4]; count];
+        let mut tint     = vec![[0u8; 4]; count];
+
+        let mut di = 0usize;
+        for lz in 0..d {
+            for ly in 0..h {
+                for lx in 0..w {
+                    let vx = lx0 as u32 + lx;
+                    let vy = ly0 as u32 + ly;
+                    let vz = lz0 as u32 + lz;
+                    let bid = snapshot.blocks[vol_idx(vx, vy, vz)] as usize;
+                    data[di]     = lut_data[bid];
+                    emission[di] = lut_emission[bid];
+                    tint[di]     = lut_tint[bid];
+                    di += 1;
+                }
+            }
+        }
+
+        let dst_origin = wgpu::Origin3d { x: lx0 as u32, y: ly0 as u32, z: lz0 as u32 };
+        let extent = wgpu::Extent3d { width: w, height: h, depth_or_array_layers: d };
+
+        for (tex, pixels) in [
+            (&self.voxel_data_tex, &data),
+            (&self.voxel_emission_tex, &emission),
+            (&self.voxel_tint_tex, &tint),
+        ] {
+            queue.write_texture(
+                wgpu::TexelCopyTextureInfo {
+                    texture: tex,
+                    mip_level: 0,
+                    origin: dst_origin,
+                    aspect: wgpu::TextureAspect::All,
+                },
+                bytemuck::cast_slice(pixels.as_slice()),
+                wgpu::TexelCopyBufferLayout {
+                    offset: 0,
+                    bytes_per_row: Some(4 * w),
+                    rows_per_image: Some(h),
+                },
+                extent,
+            );
+        }
+
+        self.volume_uploaded = true;
+        self.radiance_dirty  = true;
+
+        flow_debug_log!("VCTSystem", "upload_region",
+            "patched [{},{},{}]..[{},{},{}] ({} voxels)",
+            lx0, ly0, lz0, lx1, ly1, lz1, count);
     }
 
     // -----------------------------------------------------------------------
@@ -746,18 +877,26 @@ impl VCTSystem {
                 config: [PROPAGATION_DECAY, mono as f32, 0.0, 0.0],
             }));
             self.last_gi_mode = gi_mode;
+            // Mode change alters propagation parameters — radiance must be rebuilt.
+            self.radiance_dirty = true;
             debug_log!("VCTSystem", "dispatch_gi",
                 "GI mode changed to {} (mono={}, steps={})",
                 gi_mode, mono, PROPAGATION_STEPS_BY_MODE[gi_mode as usize]);
         }
 
-        let steps = PROPAGATION_STEPS_BY_MODE[gi_mode as usize];
+        let total_steps = PROPAGATION_STEPS_BY_MODE[gi_mode as usize];
 
         // workgroup_size(8, 8, 4): XY groups = ceil(128/8)=16, Z groups = ceil(128/4)=32
         let groups_xy = (VOLUME_SIZE + 7) / 8;
         let groups_z  = (VOLUME_SIZE + 3) / 4;
 
-        {
+        // A changed volume (or GI mode) restarts the solve: re-inject emission into
+        // radiance_a and reset the per-frame step cursor. Propagation is then spread
+        // across the next few frames instead of all-at-once, removing the spike.
+        if self.radiance_dirty {
+            self.radiance_dirty = false;
+            self.propagation_cursor = 0;
+
             let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
                 label: Some("VCT Inject"),
                 timestamp_writes: None,
@@ -767,7 +906,17 @@ impl VCTSystem {
             pass.dispatch_workgroups(groups_xy, groups_xy, groups_z);
         }
 
-        for step in 0..steps {
+        // Converged already — radiance_a holds the exact result, skip the chain.
+        if self.propagation_cursor >= total_steps {
+            return;
+        }
+
+        // Dispatch a bounded, even-sized chunk of propagation steps this frame.
+        // Starting from an even cursor and advancing by an even count guarantees the
+        // final write lands back in radiance_a (the texture frag_bg samples).
+        let start = self.propagation_cursor;
+        let end = (start + PROPAGATION_STEPS_PER_FRAME).min(total_steps);
+        for step in start..end {
             let bg = if step % 2 == 0 { &self.propagate_bg_ab } else { &self.propagate_bg_ba };
             let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
                 label: Some("VCT Propagate"),
@@ -777,6 +926,10 @@ impl VCTSystem {
             pass.set_bind_group(0, bg, &[]);
             pass.dispatch_workgroups(groups_xy, groups_xy, groups_z);
         }
+        self.propagation_cursor = end;
+
+        flow_debug_log!("VCTSystem", "dispatch_gi",
+            "propagated steps {}..{} of {}", start, end, total_steps);
     }
 
     // -----------------------------------------------------------------------
@@ -845,8 +998,16 @@ impl VCTSystem {
     }
 
     /// Rebuild and upload the per-cube model shadow buffers from the block registry.
-    /// Called each frame (cheap — GPU write is skipped when no model data is loaded yet).
-    pub fn update_model_shadows(&self, queue: &wgpu::Queue, registry: &BlockRegistry) {
+    /// Called each frame, but rebuilds/uploads only when the registry's
+    /// model-shadow version changed (typically a handful of times at startup).
+    pub fn update_model_shadows(&mut self, queue: &wgpu::Queue, registry: &BlockRegistry) {
+        if registry.model_shadow_version() == self.model_shadow_version {
+            return;
+        }
+        self.model_shadow_version = registry.model_shadow_version();
+        debug_log!("VCTSystem", "update_model_shadows",
+            "Rebuilding model shadow buffers (version {})", self.model_shadow_version);
+
         let mut header = vec![0u32; 512]; // 256 × (start, count)
         let mut cubes: Vec<f32> = Vec::new();
 

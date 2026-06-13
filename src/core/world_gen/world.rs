@@ -25,7 +25,7 @@ use rayon::prelude::*;
 use rapier3d::prelude::*;
 use crate::{debug_log, flow_debug_log};
 use crate::core::config;
-use crate::core::gameobjects::block::BlockRegistry;
+use crate::core::gameobjects::block::{BlockRegistry, BlockShape};
 use crate::core::gameobjects::chunk::Chunk;
 use crate::screens::game_3d_pipeline::Vertex3D;
 use crate::core::gameobjects::texture_atlas::TextureAtlasLayout;
@@ -168,9 +168,9 @@ impl World {
                                 granite_noise,
                             );
 
-                            // Water blocks get full water level (1.0)
+                            // Water blocks get source level (8)
                             if block_id == water_block_id {
-                                chunk.set_gen_water(bx, by, bz, block_id, 1.0);
+                                chunk.set_gen_water(bx, by, bz, block_id, 8);
                             } else {
                                 chunk.set_gen(bx, by, bz, block_id);
                             }
@@ -463,12 +463,14 @@ impl World {
 
     /// Builds meshes for dirty chunks, prioritizing those visible to camera.
     /// At most `MAX_MESH_BUILDS_PER_FRAME` meshes are built; remaining stay dirty.
-    /// Returns `(solid_meshes, water_meshes, glass_meshes, model_blocks, dirty_keys, build_time_us, dirty_count)`.
+    /// Returns `(solid, water, glass, foliage, slab, model_blocks, dirty_keys, build_time_us, dirty_count)`.
     pub fn build_meshes(
         &mut self,
         camera_pos: Vec3,
         camera_forward: Vec3,
     ) -> (
+        Vec<((i32, i32, i32), Vec<Vertex3D>, Vec<u32>, [f32; 3], [f32; 3])>,
+        Vec<((i32, i32, i32), Vec<Vertex3D>, Vec<u32>, [f32; 3], [f32; 3])>,
         Vec<((i32, i32, i32), Vec<Vertex3D>, Vec<u32>, [f32; 3], [f32; 3])>,
         Vec<((i32, i32, i32), Vec<Vertex3D>, Vec<u32>, [f32; 3], [f32; 3])>,
         Vec<((i32, i32, i32), Vec<Vertex3D>, Vec<u32>, [f32; 3], [f32; 3])>,
@@ -537,14 +539,14 @@ impl World {
         let water_block_id = self.water_block_id;
         let fluid_ids = self.fluid_sim.fluid_ids().to_vec();
 
-        // Build solid + fluid + glass meshes in parallel.
+        // Build solid + fluid + glass + foliage + slab meshes in parallel.
         type MeshTuple = ((i32, i32, i32), Vec<Vertex3D>, Vec<u32>, [f32; 3], [f32; 3]);
-        let per_chunk: Vec<(Option<MeshTuple>, Option<MeshTuple>, Option<MeshTuple>)> = dirty_keys
+        let per_chunk: Vec<(Option<MeshTuple>, Option<MeshTuple>, Option<MeshTuple>, Option<MeshTuple>, Option<MeshTuple>)> = dirty_keys
             .into_par_iter()
-            .map(|key| -> (Option<MeshTuple>, Option<MeshTuple>, Option<MeshTuple>) {
+            .map(|key| -> (Option<MeshTuple>, Option<MeshTuple>, Option<MeshTuple>, Option<MeshTuple>, Option<MeshTuple>) {
                 let chunk = match chunks.get(&key) {
                     Some(c) => c,
-                    None    => return (None, None, None),
+                    None    => return (None, None, None, None, None),
                 };
 
                 let lod = lod_map.get(&key).copied().unwrap_or(0);
@@ -560,8 +562,8 @@ impl World {
                         .map_or(0, |c| c.get(lx, ly, lz))
                 };
 
-                // Fluid mesh needs both block ID and fluid level for smooth corners.
-                let get_nb_fluid = |wx: i32, wy: i32, wz: i32| -> (u8, f32) {
+                // Fluid mesh needs both block ID and discrete fluid level for smooth corners.
+                let get_nb_fluid = |wx: i32, wy: i32, wz: i32| -> (u8, u8) {
                     let cx = wx.div_euclid(csx);
                     let cy = wy.div_euclid(csy);
                     let cz = wz.div_euclid(csz);
@@ -569,7 +571,7 @@ impl World {
                     let ly = wy.rem_euclid(csy) as usize;
                     let lz = wz.rem_euclid(csz) as usize;
                     chunks.get(&(cx, cy, cz))
-                        .map_or((0, 0.0), |c| (c.get(lx, ly, lz), c.get_fluid_level(lx, ly, lz)))
+                        .map_or((0, 0), |c| (c.get(lx, ly, lz), c.get_fluid_level(lx, ly, lz)))
                 };
 
                 // Solid mesh (LOD-aware) — excludes transparent solids (glass).
@@ -593,17 +595,29 @@ impl World {
                 let (g_verts, g_idxs) = chunk.build_transparent_mesh(registry, atlas, get_neighbor);
                 let glass = if g_verts.is_empty() { None } else { Some((key, g_verts, g_idxs, min, max)) };
 
-                (solid, water, glass)
+                // Foliage mesh — Cross / CropGrid shapes, double-sided.
+                let (f_verts, f_idxs) = chunk.build_foliage_mesh(registry, atlas);
+                let foliage = if f_verts.is_empty() { None } else { Some((key, f_verts, f_idxs, min, max)) };
+
+                // Slab mesh — half-block opaque shapes.
+                let (sl_verts, sl_idxs) = chunk.build_slab_mesh(registry, atlas);
+                let slab = if sl_verts.is_empty() { None } else { Some((key, sl_verts, sl_idxs, min, max)) };
+
+                (solid, water, glass, foliage, slab)
             })
             .collect();
 
-        let mut result:        Vec<MeshTuple> = Vec::with_capacity(per_chunk.len());
-        let mut water_meshes:  Vec<MeshTuple> = Vec::with_capacity(per_chunk.len());
-        let mut glass_meshes:  Vec<MeshTuple> = Vec::with_capacity(per_chunk.len());
-        for (s, w, g) in per_chunk {
-            if let Some(s) = s { result.push(s); }
-            if let Some(w) = w { water_meshes.push(w); }
-            if let Some(g) = g { glass_meshes.push(g); }
+        let mut result:         Vec<MeshTuple> = Vec::with_capacity(per_chunk.len());
+        let mut water_meshes:   Vec<MeshTuple> = Vec::with_capacity(per_chunk.len());
+        let mut glass_meshes:   Vec<MeshTuple> = Vec::with_capacity(per_chunk.len());
+        let mut foliage_meshes: Vec<MeshTuple> = Vec::with_capacity(per_chunk.len());
+        let mut slab_meshes:    Vec<MeshTuple> = Vec::with_capacity(per_chunk.len());
+        for (s, w, g, f, sl) in per_chunk {
+            if let Some(s)  = s  { result.push(s); }
+            if let Some(w)  = w  { water_meshes.push(w); }
+            if let Some(g)  = g  { glass_meshes.push(g); }
+            if let Some(f)  = f  { foliage_meshes.push(f); }
+            if let Some(sl) = sl { slab_meshes.push(sl); }
         }
 
         // Scan dirty chunks for blocks with custom 3D models
@@ -639,7 +653,7 @@ impl World {
 
         let build_time_us = t0.elapsed().as_micros();
 
-        (result, water_meshes, glass_meshes, model_block_positions, dirty_keys_snap, build_time_us, dirty_count)
+        (result, water_meshes, glass_meshes, foliage_meshes, slab_meshes, model_block_positions, dirty_keys_snap, build_time_us, dirty_count)
     }
 
     /// Run one frame of fluid simulation.
@@ -734,7 +748,7 @@ impl World {
             // remains in the array and adjacent fluid sees no level difference → no flow.
             let sy = csy as usize;
             let sz = csz as usize;
-            chunk.fluid_levels[lx * sy * sz + ly * sz + lz] = 0.0;
+            chunk.fluid_levels[lx * sy * sz + ly * sz + lz] = 0;
             debug_log!("World", "remove_block", "Broke block at ({}, {}, {})", wx, wy, wz);
         }
         self.dirty_boundary_neighbors(cx, cy, cz, lx, ly, lz);
@@ -766,7 +780,7 @@ impl World {
             if let Some(chunk) = self.chunks.get_mut(&(cx, cy, cz)) {
                 let sy = csy as usize;
                 let sz = csz as usize;
-                chunk.fluid_levels[lx * sy * sz + ly * sz + lz] = 1.0;
+                chunk.fluid_levels[lx * sy * sz + ly * sz + lz] = crate::core::fluid::FLUID_SOURCE_LEVEL;
             }
             self.fluid_sim.mark_dirty((cx, cy, cz));
         }
@@ -841,6 +855,9 @@ impl World {
             origin: [ox, oy, oz],
             size: VOLUME_SIZE,
             blocks,
+            // Default to a full upload; the worker overwrites this with a small box
+            // when the snapshot was triggered solely by player edits.
+            dirty_region: None,
         }
     }
 
@@ -891,12 +908,42 @@ pub enum BlockOp {
     Place { x: i32, y: i32, z: i32, block_id: u8, rotation: u8 },
 }
 
+/// World-space AABB (inclusive) of the voxels touched by a batch of block ops —
+/// but only when an incremental VCT upload is safe. Requirements: at least one op,
+/// no freshly streamed chunks (`changed == false`), and a near-stationary camera
+/// (`snapshot_dist <= 1.0`, i.e. the volume origin has not slid). Any wider change
+/// (water spread, generation, movement) returns `None`, forcing a full re-upload.
+fn vct_dirty_region(
+    block_ops: &[BlockOp],
+    changed: bool,
+    snapshot_dist: f32,
+) -> Option<([i32; 3], [i32; 3])> {
+    if block_ops.is_empty() || changed || snapshot_dist > 1.0 {
+        return None;
+    }
+    let mut mn = [i32::MAX; 3];
+    let mut mx = [i32::MIN; 3];
+    for op in block_ops {
+        let (x, y, z) = match op {
+            BlockOp::Break { x, y, z } => (*x, *y, *z),
+            BlockOp::Place { x, y, z, .. } => (*x, *y, *z),
+        };
+        mn[0] = mn[0].min(x); mn[1] = mn[1].min(y); mn[2] = mn[2].min(z);
+        mx[0] = mx[0].max(x); mx[1] = mx[1].max(y); mx[2] = mx[2].max(z);
+    }
+    Some((mn, mx))
+}
+
 pub struct WorldResult {
     pub meshes: Vec<((i32, i32, i32), Vec<Vertex3D>, Vec<u32>, [f32; 3], [f32; 3])>,
     /// Water meshes (separate for transparent rendering pass).
     pub water_meshes: Vec<((i32, i32, i32), Vec<Vertex3D>, Vec<u32>, [f32; 3], [f32; 3])>,
     /// Transparent solid (glass) meshes — alpha-blended pbr_vct pass.
     pub transparent_meshes: Vec<((i32, i32, i32), Vec<Vertex3D>, Vec<u32>, [f32; 3], [f32; 3])>,
+    /// Foliage meshes (Cross / CropGrid shapes) — rendered without backface culling.
+    pub foliage_meshes: Vec<((i32, i32, i32), Vec<Vertex3D>, Vec<u32>, [f32; 3], [f32; 3])>,
+    /// Slab meshes — rendered in the opaque pass.
+    pub slab_meshes: Vec<((i32, i32, i32), Vec<Vertex3D>, Vec<u32>, [f32; 3], [f32; 3])>,
     pub evicted: Vec<(i32, i32, i32)>,
     pub chunk_count: usize,
     pub gen_time_us: u128,
@@ -1046,10 +1093,10 @@ impl WorldWorker {
                                 || has_block_ops
                                 || world.has_dirty_chunks();
 
-                            let (meshes, water_meshes, transparent_meshes, model_block_positions, meshed_chunk_keys, mesh_time, dirty_count) = if has_dirty {
+                            let (meshes, water_meshes, transparent_meshes, foliage_meshes, slab_meshes, model_block_positions, meshed_chunk_keys, mesh_time, dirty_count) = if has_dirty {
                                 world.build_meshes(camera_pos, camera_forward)
                             } else {
-                                (Vec::new(), Vec::new(), Vec::new(), Vec::<(i32, i32, i32, u8, u8)>::new(), Vec::new(), 0, 0)
+                                (Vec::new(), Vec::new(), Vec::new(), Vec::new(), Vec::new(), Vec::<(i32, i32, i32, u8, u8)>::new(), Vec::new(), 0, 0)
                             };
 
                             // Raycast skips fluid blocks (water, lava) — they are transparent to selection.
@@ -1212,13 +1259,19 @@ impl WorldWorker {
                                                     if bid == 0 || fluid_ids_phys.contains(&bid) {
                                                         continue;
                                                     }
+                                                    // Skip foliage — player walks through them
+                                                    if let Some(def) = world.registry.get(bid) {
+                                                        if matches!(def.block_shape, BlockShape::Cross | BlockShape::CropGrid) {
+                                                            continue;
+                                                        }
+                                                    }
                                                     // Block corner in world space
                                                     let bx = key.0 as f32 * chunk_sx + x as f32;
                                                     let by = key.1 as f32 * chunk_sy + y as f32;
                                                     let bz = key.2 as f32 * chunk_sz + z as f32;
-                                                    // Use model AABB if available, otherwise full 1×1×1 cube
+                                                    let rot = chunk.get_rotation(x, y, z);
+                                                    // Use model AABB if available; else check slab; else full cube
                                                     let (pose, shape) = if let Some(&(mn_raw, mx_raw)) = aabbs_phys.get(&bid) {
-                                                        let rot = chunk.get_rotation(x, y, z);
                                                         let (mn, mx) = rotate_aabb_y(rot, mn_raw, mx_raw);
                                                         let hw = (mx[0] - mn[0]) * 0.5;
                                                         let hh = (mx[1] - mn[1]) * 0.5;
@@ -1230,6 +1283,25 @@ impl WorldWorker {
                                                             Pose::from_translation(rapier3d::prelude::Vector::new(cx, cy, cz)),
                                                             SharedShape::cuboid(hw.max(0.01), hh.max(0.01), hd.max(0.01)),
                                                         )
+                                                    } else if let Some(def) = world.registry.get(bid) {
+                                                        if let Some((mn, mx)) = Chunk::collision_aabb_for(&def.block_shape, rot) {
+                                                            let hw = (mx[0] - mn[0]) * 0.5;
+                                                            let hh = (mx[1] - mn[1]) * 0.5;
+                                                            let hd = (mx[2] - mn[2]) * 0.5;
+                                                            (
+                                                                Pose::from_translation(rapier3d::prelude::Vector::new(
+                                                                    bx + mn[0] + hw,
+                                                                    by + mn[1] + hh,
+                                                                    bz + mn[2] + hd,
+                                                                )),
+                                                                SharedShape::cuboid(hw.max(0.01), hh.max(0.01), hd.max(0.01)),
+                                                            )
+                                                        } else {
+                                                            (
+                                                                Pose::from_translation(rapier3d::prelude::Vector::new(bx + 0.5, by + 0.5, bz + 0.5)),
+                                                                cuboid_full.clone(),
+                                                            )
+                                                        }
                                                     } else {
                                                         (
                                                             Pose::from_translation(rapier3d::prelude::Vector::new(bx + 0.5, by + 0.5, bz + 0.5)),
@@ -1260,7 +1332,11 @@ impl WorldWorker {
                             let needs_snapshot = has_dirty || has_block_ops || snapshot_dist > 8.0;
                             let voxel_snapshot = if needs_snapshot {
                                 last_snapshot_cam = camera_pos;
-                                Some(world.extract_voxel_snapshot(camera_pos))
+                                let mut snap = world.extract_voxel_snapshot(camera_pos);
+                                // Attach an incremental-upload hint when the change is just a
+                                // few player edits at a stationary origin (else None = full upload).
+                                snap.dirty_region = vct_dirty_region(&block_ops, changed, snapshot_dist);
+                                Some(snap)
                             } else {
                                 None
                             };
@@ -1274,6 +1350,8 @@ impl WorldWorker {
                                 meshes,
                                 water_meshes,
                                 transparent_meshes,
+                                foliage_meshes,
+                                slab_meshes,
                                 evicted,
                                 chunk_count: world.chunk_count(),
                                 gen_time_us: gen_time,
@@ -1375,10 +1453,10 @@ impl WorldWorker {
                             let has_block_ops = !block_ops.is_empty();
                             world.simulate_water();
                             let has_dirty = changed || has_block_ops || world.has_dirty_chunks();
-                            let (meshes, water_meshes, transparent_meshes, model_block_positions, meshed_chunk_keys, mesh_time, dirty_count) = if has_dirty {
+                            let (meshes, water_meshes, transparent_meshes, foliage_meshes, slab_meshes, model_block_positions, meshed_chunk_keys, mesh_time, dirty_count) = if has_dirty {
                                 world.build_meshes(camera_pos, camera_forward)
                             } else {
-                                (Vec::new(), Vec::new(), Vec::new(), Vec::<(i32, i32, i32, u8, u8)>::new(), Vec::new(), 0, 0)
+                                (Vec::new(), Vec::new(), Vec::new(), Vec::new(), Vec::new(), Vec::<(i32, i32, i32, u8, u8)>::new(), Vec::new(), 0, 0)
                             };
                             let tris_ray = model_block_tris.read().unwrap();
                             let raycast_result = ray_dir.and_then(|dir| {
@@ -1452,15 +1530,25 @@ impl WorldWorker {
                                             for z in 0..phys_sz {
                                                 let bid = chunk.get(x,y,z);
                                                 if bid == 0 || fluid_ids_phys.contains(&bid) { continue; }
+                                                if let Some(def) = world.registry.get(bid) {
+                                                    if matches!(def.block_shape, BlockShape::Cross | BlockShape::CropGrid) { continue; }
+                                                }
                                                 let bx = key.0 as f32*chunk_sx + x as f32;
                                                 let by = key.1 as f32*chunk_sy + y as f32;
                                                 let bz = key.2 as f32*chunk_sz + z as f32;
+                                                let rot = chunk.get_rotation(x,y,z);
                                                 let (pose,shape) = if let Some(&(mn_raw,mx_raw)) = aabbs_phys.get(&bid) {
-                                                    let rot = chunk.get_rotation(x,y,z);
                                                     let (mn,mx) = rotate_aabb_y(rot,mn_raw,mx_raw);
                                                     let hw=(mx[0]-mn[0])*0.5; let hh=(mx[1]-mn[1])*0.5; let hd=(mx[2]-mn[2])*0.5;
                                                     let cx=bx+mn[0]+hw; let cy=by+mn[1]+hh; let cz=bz+mn[2]+hd;
                                                     (Pose::from_translation(rapier3d::prelude::Vector::new(cx,cy,cz)), SharedShape::cuboid(hw.max(0.01),hh.max(0.01),hd.max(0.01)))
+                                                } else if let Some(def) = world.registry.get(bid) {
+                                                    if let Some((mn,mx)) = Chunk::collision_aabb_for(&def.block_shape, rot) {
+                                                        let hw=(mx[0]-mn[0])*0.5; let hh=(mx[1]-mn[1])*0.5; let hd=(mx[2]-mn[2])*0.5;
+                                                        (Pose::from_translation(rapier3d::prelude::Vector::new(bx+mn[0]+hw,by+mn[1]+hh,bz+mn[2]+hd)), SharedShape::cuboid(hw.max(0.01),hh.max(0.01),hd.max(0.01)))
+                                                    } else {
+                                                        (Pose::from_translation(rapier3d::prelude::Vector::new(bx+0.5,by+0.5,bz+0.5)), cuboid_full.clone())
+                                                    }
                                                 } else {
                                                     (Pose::from_translation(rapier3d::prelude::Vector::new(bx+0.5,by+0.5,bz+0.5)), cuboid_full.clone())
                                                 };
@@ -1478,13 +1566,17 @@ impl WorldWorker {
                             let needs_snapshot = has_dirty || has_block_ops || snapshot_dist > 8.0;
                             let voxel_snapshot = if needs_snapshot {
                                 last_snapshot_cam = camera_pos;
-                                Some(world.extract_voxel_snapshot(camera_pos))
+                                let mut snap = world.extract_voxel_snapshot(camera_pos);
+                                snap.dirty_region = vct_dirty_region(&block_ops, changed, snapshot_dist);
+                                Some(snap)
                             } else { None };
                             let worker_total_us = t_total.elapsed().as_micros();
                             let lod_counts = world.lod_counts();
                             let biome_ambient_tint = world.biome_ambient_tint_at(camera_pos);
                             let _ = result_tx.send(WorldResult {
-                                meshes, water_meshes, transparent_meshes, evicted,
+                                meshes, water_meshes, transparent_meshes,
+                                foliage_meshes, slab_meshes,
+                                evicted,
                                 chunk_count: world.chunk_count(),
                                 gen_time_us: gen_time, mesh_time_us: mesh_time, pending,
                                 raycast_result, physics_ready, voxel_snapshot, lod_counts,
