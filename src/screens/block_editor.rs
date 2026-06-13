@@ -10,7 +10,7 @@
 //   • Real-time parameter reflection (colors, textures, emission)
 //   • Orbit camera via mouse drag on the preview area
 //   • Light-emission overlay in the info bar
-//   • Tabbed inspector: Basic / Material / Emission / Volumetric / Faces / Glass / Fluid
+//   • Tabbed inspector: Basic / Material / Emission / Faces / Fluid / Lights
 //   • Save single block JSON + update block_registry.json
 //   • Create new blocks from scratch
 // =============================================================================
@@ -50,18 +50,16 @@ enum EditorTab {
     Material,
     Emission,
     Faces,
-    Glass,
     Fluid,
     Lights,
 }
 
 impl EditorTab {
-    const ALL: [EditorTab; 7] = [
+    const ALL: [EditorTab; 6] = [
         EditorTab::Basic,
         EditorTab::Material,
         EditorTab::Emission,
         EditorTab::Faces,
-        EditorTab::Glass,
         EditorTab::Fluid,
         EditorTab::Lights,
     ];
@@ -72,7 +70,6 @@ impl EditorTab {
             EditorTab::Material  => "Material",
             EditorTab::Emission  => "Emission",
             EditorTab::Faces     => "Faces",
-            EditorTab::Glass     => "Glass",
             EditorTab::Fluid     => "Fluid",
             EditorTab::Lights    => "Lights",
         }
@@ -198,6 +195,7 @@ impl BlockEditor {
             inventory_tab:    None,
             light_sources:    Vec::new(),
             tex_has_alpha:    false,
+            tex_avg_opacity:  1.0,
         }
     }
 
@@ -520,11 +518,9 @@ impl BlockEditor {
         let tag_h     = 14.0;
         let tags_data: &[(&str, Color32, bool)] = &[
             ("Solid",       Color32::from_rgb(80,  150,  80), def.solid),
-            ("Transparent", Color32::from_rgb(80,  120, 200), def.transparent),
             ("Fluid",       Color32::from_rgb(60,  130, 200), def.is_fluid()),
             ("Emits Light", Color32::from_rgb(220, 200,  50), def.emission.emit_light),
             ("Biome Tint",  Color32::from_rgb(80,  180,  80), def.biome_tint),
-            ("Glass",       Color32::from_rgb(160, 200, 220), def.is_glass()),
         ];
         let active_tags: Vec<_> = tags_data.iter().filter(|t| t.2).collect();
         let total_w = active_tags.len() as f32 * (tag_w + 4.0) - 4.0;
@@ -660,7 +656,6 @@ impl BlockEditor {
                 EditorTab::Material  => self.draw_tab_material(ui),
                 EditorTab::Emission  => self.draw_tab_emission(ui),
                 EditorTab::Faces     => self.draw_tab_faces(ui),
-                EditorTab::Glass     => self.draw_tab_glass(ui),
                 EditorTab::Fluid     => self.draw_tab_fluid(ui),
                 EditorTab::Lights    => self.draw_tab_lights(ui),
             }
@@ -708,12 +703,6 @@ impl BlockEditor {
         toggle_field(
             ui, &mut self.edit_def.solid, "Solid",
             "Whether the block blocks movement and generates solid mesh faces.",
-            &mut self.dirty,
-        );
-
-        toggle_field(
-            ui, &mut self.edit_def.transparent, "Transparent",
-            "Whether light passes through. Use for glass, leaves, water. Enables transparent render pass.",
             &mut self.dirty,
         );
 
@@ -1126,65 +1115,6 @@ impl BlockEditor {
             ui.add_space(4.0);
             face_override_section(ui, "West (-X)",  &mut faces.west, dirty);
         });
-    }
-
-    // -----------------------------------------------------------------------
-    // Tab: Glass
-    // -----------------------------------------------------------------------
-
-    fn draw_tab_glass(&mut self, ui: &mut Ui) {
-        section_header(ui, "Glass / Translucency");
-
-        if !self.edit_def.transparent {
-            ui.label(
-                RichText::new("⚠ Block is not transparent. Enable 'transparent' in the Basic tab first.")
-                    .color(Color32::YELLOW)
-                    .size(13.0),
-            );
-            ui.add_space(8.0);
-        }
-
-        ui.label(RichText::new(
-            "Controls how light passes through solid transparent blocks (glass, stained glass).\n\
-             Opacity 0 = perfectly clear, 1 = fully opaque.\n\
-             Tint multiplies all light passing through (e.g. [1,0.3,0.3] = red stained glass)."
-        ).small().color(Color32::GRAY));
-        ui.add_space(6.0);
-
-        labeled_field(ui, "Tint Color (RGB)", "Multiplies light passing through the block. White = clear, colored = tinted GI & shadows.");
-        if color_edit_3(ui, &mut self.edit_def.glass.tint_color) { self.dirty = true; }
-
-        labeled_field(ui, "Opacity (0..1)", "0 = clear glass, 1 = opaque. Controls how much light is blocked per unit.");
-        if ui.add(egui::Slider::new(&mut self.edit_def.glass.opacity, 0.0_f32..=1.0)
-            .text("opacity")).changed() { self.dirty = true; }
-
-        // Transmission preview
-        ui.add_space(8.0);
-        egui::Frame::none()
-            .fill(Color32::from_gray(20))
-            .rounding(6.0)
-            .inner_margin(10.0)
-            .show(ui, |ui| {
-                ui.label(RichText::new("Transmission Preview").small().color(Color32::GRAY));
-                let (rect, _) = ui.allocate_exact_size(Vec2::new(ui.available_width(), 50.0), egui::Sense::hover());
-                // Background scene (simulated)
-                ui.painter().rect_filled(rect, 4.0, Color32::from_rgb(200, 200, 220));
-                // Glass overlay
-                let tint = color_f32_to_egui(self.edit_def.glass.tint_color);
-                let alpha = (self.edit_def.glass.opacity * 200.0) as u8;
-                ui.painter().rect_filled(
-                    rect,
-                    4.0,
-                    Color32::from_rgba_unmultiplied(tint.r(), tint.g(), tint.b(), alpha),
-                );
-                ui.painter().text(
-                    rect.center(),
-                    egui::Align2::CENTER_CENTER,
-                    format!("{:.0}% opacity", self.edit_def.glass.opacity * 100.0),
-                    egui::FontId::proportional(12.0),
-                    Color32::WHITE,
-                );
-            });
     }
 
     // -----------------------------------------------------------------------

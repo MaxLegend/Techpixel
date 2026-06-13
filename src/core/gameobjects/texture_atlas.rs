@@ -143,14 +143,29 @@ impl TextureAtlas {
 
     pub fn layout(&self) -> &TextureAtlasLayout { &self.layout }
 
-    /// Returns true if the named atlas tile contains any non-opaque texel
-    /// (alpha < 200). Used to auto-route a block to the transparent pass purely
-    /// from its texture (holes or semi-transparency) instead of a JSON flag.
-    /// The 200 threshold ignores near-opaque anti-aliased edges (~250–255).
-    pub fn texture_has_alpha(&self, name: &str) -> bool {
+    /// Inspect the named atlas tile's alpha channel.
+    /// Returns `(has_alpha, avg_opacity)`:
+    ///   • `has_alpha` — any texel is non-opaque (alpha < 200), i.e. a hole or a
+    ///     semi-transparent pixel. The 200 threshold ignores anti-aliased edges.
+    ///   • `avg_opacity` — mean alpha over the tile, normalised to 0..1. Drives how
+    ///     much a texture-transparent block dims a shadow ray (1 = fully opaque).
+    /// A missing texture reports `(false, 1.0)` (treated as opaque).
+    pub fn texture_alpha_info(&self, name: &str) -> (bool, f32) {
         match self.tile_rgba(name) {
-            Some(px) => px.chunks_exact(4).any(|p| p[3] < 200),
-            None     => false,
+            Some(px) => {
+                let mut sum = 0u32;
+                let mut n   = 0u32;
+                let mut has = false;
+                for p in px.chunks_exact(4) {
+                    let a = p[3];
+                    sum += a as u32;
+                    n   += 1;
+                    if a < 200 { has = true; }
+                }
+                let avg = if n > 0 { (sum as f32 / n as f32) / 255.0 } else { 1.0 };
+                (has, avg)
+            }
+            None => (false, 1.0),
         }
     }
 

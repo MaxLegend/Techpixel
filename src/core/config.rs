@@ -99,6 +99,12 @@ pub static HALO_ENABLED: AtomicU32 = AtomicU32::new(1);
 /// Whether volumetric god rays (spot-light beam quads) are rendered. 1 = enabled.
 pub static VOLUMETRIC_RAYS_ENABLED: AtomicU32 = AtomicU32::new(1);
 
+/// Whether ray-traced (DDA) shadows account for per-block texture transparency.
+/// When enabled, blocks whose transparency comes from their texture (holes /
+/// semi-transparent pixels) let a proportional amount of light through instead of
+/// casting a solid shadow. 0 = off (default, opt-in).
+pub static SHADOW_TEXTURE_TRANSPARENCY: AtomicU32 = AtomicU32::new(0);
+
 /// Mouse sensitivity × 10000 (e.g. 30 = 0.003). Controls camera rotation speed.
 pub static MOUSE_SENSITIVITY: AtomicU32 = AtomicU32::new(30);
 
@@ -206,6 +212,15 @@ pub fn shadow_quality() -> u32 {
 
 pub fn set_shadow_quality(v: u32) {
     SHADOW_QUALITY.store(v.clamp(8, 64), Ordering::Relaxed);
+}
+
+/// Whether DDA shadows account for per-block texture transparency (holes / glass).
+pub fn shadow_texture_transparency() -> bool {
+    SHADOW_TEXTURE_TRANSPARENCY.load(Ordering::Relaxed) != 0
+}
+
+pub fn set_shadow_texture_transparency(v: bool) {
+    SHADOW_TEXTURE_TRANSPARENCY.store(v as u32, Ordering::Relaxed);
 }
 
 pub fn halo_enabled() -> bool {

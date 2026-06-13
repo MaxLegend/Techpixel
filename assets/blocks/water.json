@@ -19,7 +19,6 @@
     "ao": 1.0
   },
   "solid": false,
-  "transparent": true,
   "is_water": true,
   "inventory_tab": "Fluids",
   "fluid": {

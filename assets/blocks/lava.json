@@ -19,7 +19,6 @@
         "ao": 1.0
     },
     "solid": false,
-    "transparent": false,
     "inventory_tab": "Fluids",
     "fluid": {
         "level_decrease": 2,

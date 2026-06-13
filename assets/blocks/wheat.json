@@ -3,7 +3,6 @@
   "display_name": "Wheat",
   "color": [0.8, 0.7, 0.1],
   "solid": false,
-  "transparent": true,
   "biome_tint": false,
   "block_shape": "crop_grid",
   "placement_mode": "fixed",

@@ -598,17 +598,15 @@ pub struct BlockDefinition {
     #[serde(default = "default_true")]
     pub solid: bool,
 
-    /// Whether light can pass through this block.
-    /// When `true` and the block is `solid`, it is rendered in the transparent
-    /// pass (alpha-blended) and its voxel writes to the VCT tint volume so the
-    /// GI/shadow systems propagate light through it with the configured tint.
-    #[serde(default)]
+    /// **Deprecated** — transparency is now auto-detected from the texture's alpha
+    /// (`tex_has_alpha`). Still read from old JSONs for back-compat, but never written
+    /// (`skip_serializing`) and no longer surfaced in the block editor.
+    #[serde(default, skip_serializing)]
     pub transparent: bool,
 
-    /// Optical tint/opacity for transparent solid blocks (glass, stained glass).
-    /// Only consulted when `transparent: true`. Defaults to clear glass with
-    /// low opacity (0.15).
-    #[serde(default)]
+    /// **Deprecated** — legacy optical tint/opacity for the old JSON `transparent`
+    /// glass system. Kept for back-compat reads; never written and not editable.
+    #[serde(default, skip_serializing)]
     pub glass: GlassProperties,
 
     /// Whether this block is a water fluid block with variable height.
@@ -714,6 +712,13 @@ pub struct BlockDefinition {
     /// the hand-set `transparent` JSON flag. Set by `BlockRegistry::classify_texture_alpha`.
     #[serde(skip)]
     pub tex_has_alpha: bool,
+
+    /// Average texture opacity (0..1) of the most see-through face texture, computed
+    /// at load alongside `tex_has_alpha`. 1.0 = fully opaque. Used by the optional
+    /// texture-transparency shadow mode to dim shadow rays in proportion to how much
+    /// of the block's texture is solid.
+    #[serde(skip)]
+    pub tex_avg_opacity: f32,
 }
 
 fn default_true() -> bool { true }
@@ -970,16 +975,26 @@ impl BlockRegistry {
     /// a JSON `transparent` flag. The caller supplies `texture_has_alpha(name)` (which
     /// inspects the atlas) so this module keeps no dependency on `TextureAtlas`.
     /// Run AFTER `bake_layered_textures` so resolved (baked) face keys exist.
-    pub fn classify_texture_alpha<F>(&mut self, mut texture_has_alpha: F)
+    pub fn classify_texture_alpha<F>(&mut self, mut texture_info: F)
     where
-        F: FnMut(&str) -> bool,
+        F: FnMut(&str) -> (bool, f32),
     {
         let mut count = 0usize;
         for def in &mut self.definitions {
-            let has = (0u8..6).any(|f| {
-                def.texture_for_face(f).map_or(false, |name| texture_has_alpha(name))
-            });
-            def.tex_has_alpha = has;
+            // Aggregate over the block's face textures: it is transparent if ANY face
+            // has a hole/partial texel, and its representative opacity is the MINIMUM
+            // average across faces (the most see-through face drives shadow leakage).
+            let mut has     = false;
+            let mut min_avg = 1.0f32;
+            for f in 0u8..6 {
+                if let Some(name) = def.texture_for_face(f) {
+                    let (h, avg) = texture_info(name);
+                    if h { has = true; }
+                    if avg < min_avg { min_avg = avg; }
+                }
+            }
+            def.tex_has_alpha   = has;
+            def.tex_avg_opacity = min_avg;
             if has { count += 1; }
         }
         debug_log!(
@@ -1408,6 +1423,7 @@ impl BlockRegistry {
                     inventory_tab: None,
                     light_sources: Vec::new(),
                     tex_has_alpha: false,
+                    tex_avg_opacity: 1.0,
                 };
 
                 debug_log!(

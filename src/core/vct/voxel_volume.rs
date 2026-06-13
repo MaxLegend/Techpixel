@@ -115,6 +115,9 @@ pub(crate) fn build_volume_luts(
     let mut lut_emission = [[0u8; 4]; 256];
     let mut lut_tint     = [[0u8; 4]; 256];
 
+    // Opt-in mode: let DDA shadows leak through texture-transparent blocks (holes).
+    let rt_tex_shadows = crate::core::config::shadow_texture_transparency();
+
     for block_id in 1u8..=255 {
         let li = block_id as usize;
         if let Some(def) = registry.get(block_id) {
@@ -156,6 +159,23 @@ pub(crate) fn build_volume_luts(
             // skip hard DDA shadows and apply gradual light absorption instead.
             if is_fluid_block {
                 voxel_alpha = VOXEL_ALPHA_FLUID; // 40
+            }
+
+            // Texture-transparency shadows (opt-in): blocks whose transparency comes
+            // purely from their texture (holes / partial pixels) become semi-transmissive
+            // in the shadow volume so light leaks through. Reuses the glass voxel band;
+            // the white tint with alpha = average texture opacity makes the DDA shadow
+            // attenuate in proportion to how solid the texture is. Skipped for blocks
+            // already classified as glass / fluid / model.
+            if rt_tex_shadows
+                && def.tex_has_alpha
+                && !is_glass_block
+                && !is_fluid_block
+                && !is_model_block
+            {
+                voxel_alpha = VOXEL_ALPHA_GLASS; // 180 → partial-transmission branch
+                let op = def.tex_avg_opacity.clamp(0.0, 1.0);
+                lut_tint[li] = [255, 255, 255, (op * 255.0) as u8];
             }
 
             lut_data[li] = [r, g, b, voxel_alpha];

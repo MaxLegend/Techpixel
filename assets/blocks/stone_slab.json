@@ -3,7 +3,6 @@
   "display_name": "Stone Slab",
   "color": [0.5, 0.5, 0.5],
   "solid": true,
-  "transparent": false,
   "block_shape": "slab",
   "placement_mode": "attach_full",
   "inventory_tab": "Building",

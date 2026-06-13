@@ -17,6 +17,8 @@ pub struct UserSettings {
     pub biome_ambient_tint_enabled: bool,
     pub shadow_sun_enabled:        bool,
     pub shadow_block_enabled:      bool,
+    #[serde(default)]
+    pub shadow_texture_transparency: bool,
     pub gi_mode:                   u32,
     pub shadow_quality:            u32,
     pub halo_enabled:              bool,
@@ -40,6 +42,7 @@ impl Default for UserSettings {
             biome_ambient_tint_enabled: true,
             shadow_sun_enabled:        true,
             shadow_block_enabled:      true,
+            shadow_texture_transparency: false,
             gi_mode:                   4,
             shadow_quality:            64,
             halo_enabled:              true,
@@ -82,6 +85,7 @@ pub fn load_and_apply() {
     config::set_biome_ambient_tint_enabled(settings.biome_ambient_tint_enabled);
     config::set_shadow_sun_enabled(settings.shadow_sun_enabled);
     config::set_shadow_block_enabled(settings.shadow_block_enabled);
+    config::set_shadow_texture_transparency(settings.shadow_texture_transparency);
     config::set_gi_mode(settings.gi_mode);
     config::set_shadow_quality(settings.shadow_quality);
     config::set_halo_enabled(settings.halo_enabled);
@@ -100,6 +104,7 @@ pub fn save_current() {
         biome_ambient_tint_enabled: config::biome_ambient_tint_enabled(),
         shadow_sun_enabled:        config::shadow_sun_enabled(),
         shadow_block_enabled:      config::shadow_block_enabled(),
+        shadow_texture_transparency: config::shadow_texture_transparency(),
         gi_mode:                   config::gi_mode(),
         shadow_quality:            config::shadow_quality(),
         halo_enabled:              config::halo_enabled(),

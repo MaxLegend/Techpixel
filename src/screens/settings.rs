@@ -326,6 +326,27 @@ impl Screen for SettingsScreen {
 
                     ui.add_space(12.0);
 
+                    let mut tex_shadows = config::shadow_texture_transparency();
+                    if ui.checkbox(&mut tex_shadows, "Texture transparency in shadows").changed() {
+                        config::set_shadow_texture_transparency(tex_shadows);
+                        user_settings::save_current();
+                        debug_log!("SettingsScreen", "build_ui",
+                            "Texture-transparency shadows -> {}", tex_shadows);
+                    }
+                    ui.add_space(4.0);
+                    ui.label(
+                        egui::RichText::new(
+                            "Ray-traced shadows let light through transparent texture \
+                             pixels (e.g. holes in andesite): the shadow softens in \
+                             proportion to how see-through the block's texture is. \
+                             Updates as you move / edit blocks."
+                        )
+                        .size(11.0)
+                        .color(egui::Color32::GRAY),
+                    );
+
+                    ui.add_space(12.0);
+
                     // --- Volumetric effects ---
                     ui.label(
                         egui::RichText::new("Volumetric Effects")

@@ -8,7 +8,6 @@
         0.3
     ],
     "solid": true,
-    "transparent": false,
     "inventory_tab": "Machines",
     "placement_mode": "look_horizontal",
     "model": "redstone_furnace_je.json",

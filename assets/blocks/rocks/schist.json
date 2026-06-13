@@ -19,7 +19,6 @@
     "ao": 0.96
   },
   "solid": true,
-  "transparent": false,
   "emit_light": 0,
   "emission": {
     "emit_light": false,

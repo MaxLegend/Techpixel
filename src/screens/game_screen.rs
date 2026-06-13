@@ -388,8 +388,9 @@ impl GameScreen {
         );
 
         // Auto-classify transparency from texture alpha (replaces the JSON `transparent`
-        // flag for render-pass routing). Runs after baking so resolved face keys exist.
-        registry.classify_texture_alpha(|name| atlas.texture_has_alpha(name));
+        // flag for render-pass routing) and capture each block's average opacity for the
+        // optional texture-transparency shadow mode. Runs after baking so resolved keys exist.
+        registry.classify_texture_alpha(|name| atlas.texture_alpha_info(name));
 
         let atlas_layout = atlas.layout().clone();
 

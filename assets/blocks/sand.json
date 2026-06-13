@@ -19,7 +19,6 @@
     "ao": 1.0
   },
   "solid": true,
-  "transparent": false,
   "inventory_tab": "Natural",
   "emit_light": 0,
   "emission": {

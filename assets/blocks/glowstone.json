@@ -117,7 +117,6 @@
   "placement_mode": "fixed",
   "solid": true,
   "texture": null,
-  "transparent": false,
   "volumetric": {
     "halo_enabled": true,
     "halo_intensity": 0.6499999761581421,
